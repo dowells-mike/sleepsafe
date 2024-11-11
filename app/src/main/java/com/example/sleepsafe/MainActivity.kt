@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,33 +57,12 @@ fun HomeScreen() {
             TopAppBar(
                 title = { Text(text = "SleepSafe", fontSize = 20.sp) },
                 actions = {
-                    IconButton(onClick = {
-                        // Handle settings icon click - navigate to account or settings
-                    }) {
-                        Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Account Settings")
-                    }
+                    AccountSettingsIcon()
                 }
             )
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings") },
-                    selected = false,
-                    onClick = {
-                        // Handle navigation to Settings Page
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Build, contentDescription = "Analysis") },
-                    label = { Text("Analysis") },
-                    selected = false,
-                    onClick = {
-                        // Handle navigation to Analysis Page
-                    }
-                )
-            }
+            BottomNavigationBar()
         }
     ) { innerPadding ->
         Column(
@@ -93,28 +73,64 @@ fun HomeScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(8.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Hours Slept: ",
-                        fontSize = 20.sp,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = "Sleep Quality Score: ",
-                        fontSize = 20.sp,
-                        color = Color.Black,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
+            SleepInfoCard()
+        }
+    }
+}
+
+@Composable
+fun AccountSettingsIcon() {
+    IconButton(onClick = {
+        // navigating to account settings page/ screen
+    }) {
+        Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Account Settings")
+    }
+}
+
+@Composable
+fun BottomNavigationBar() {
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+            label = { Text("Settings") },
+            selected = false,
+            onClick = {
+                // navigation for settings page
             }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Search, contentDescription = "Analysis Page") },
+            label = { Text("Analysis") },
+            selected = false,
+            onClick = {
+                // navigation for analysis page
+            }
+        )
+    }
+}
+
+@Composable
+fun SleepInfoCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Hours Slept: ",
+                fontSize = 20.sp,
+                color = Color.Black
+            )
+            Text(
+                text = "Sleep Quality Score: ",
+                fontSize = 20.sp,
+                color = Color.Black,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
