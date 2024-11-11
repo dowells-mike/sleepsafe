@@ -9,13 +9,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SettingsScreen() {
+fun AccountScreen() {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "Settings Screen",
+            text = "Account Settings Screen",
             fontSize = 24.sp
         )
     }

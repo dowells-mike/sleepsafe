@@ -37,7 +37,7 @@ fun MainScreen() {
             TopAppBar(
                 title = { Text(text = "SleepSafe", fontSize = 20.sp) },
                 actions = {
-                    AccountSettingsIcon()  // Moved to a separate file
+                    AccountSettingsIcon(navController)  // Pass the navController here
                 }
             )
         },
