@@ -6,10 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.sleepsafe.BottomNavItem
-import com.example.sleepsafe.screens.HomeScreen
-import com.example.sleepsafe.screens.AnalysisScreen
-import com.example.sleepsafe.screens.SettingsScreen
-import com.example.sleepsafe.screens.AccountScreen
+import com.example.sleepsafe.screens.*
 
 @Composable
 fun NavHostContainer(navController: NavHostController, modifier: Modifier = Modifier) {
@@ -17,6 +14,6 @@ fun NavHostContainer(navController: NavHostController, modifier: Modifier = Modi
         composable(BottomNavItem.Home.route) { HomeScreen() }
         composable(BottomNavItem.Analysis.route) { AnalysisScreen() }
         composable(BottomNavItem.Settings.route) { SettingsScreen() }
-        composable(BottomNavItem.Account.route) { AccountScreen() } // Add Account route
+        composable("account") { AccountScreen() }
     }
 }
