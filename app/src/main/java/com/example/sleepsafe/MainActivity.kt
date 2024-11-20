@@ -17,6 +17,7 @@ import com.example.sleepsafe.ui.theme.SleepsafeTheme
 import com.example.sleepsafe.components.BottomNavigationBar
 import com.example.sleepsafe.components.NavHostContainer
 
+// MainActivity updated to interact with ViewModels
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,7 +38,7 @@ fun MainScreen() {
             TopAppBar(
                 title = { Text(text = "SleepSafe", fontSize = 20.sp) },
                 actions = {
-                    AccountSettingsIcon(navController)  // Pass the navController here
+                    AccountSettingsIcon(navController)
                 }
             )
         },

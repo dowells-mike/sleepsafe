@@ -7,9 +7,11 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
-sealed class BottomNavItem(var route: String, var icon: ImageVector, var label: String) {
-    object Home : BottomNavItem("home", Icons.Default.Home, "Home")
-    object Analysis : BottomNavItem("analysis", Icons.Default.Search, "Analysis")
-    object Settings : BottomNavItem("settings", Icons.Default.Settings, "Settings")
-    object Account : BottomNavItem("account", Icons.Default.AccountCircle, "Account")
-}
+data class BottomNavItem(val route: String, val icon: ImageVector, val label: String)
+
+val BottomNavItems = listOf(
+    BottomNavItem("home", Icons.Default.Home, "Home"),
+    BottomNavItem("analysis", Icons.Default.Search, "Analysis"),
+    BottomNavItem("settings", Icons.Default.Settings, "Settings"),
+    BottomNavItem("account", Icons.Default.AccountCircle, "Account")
+)

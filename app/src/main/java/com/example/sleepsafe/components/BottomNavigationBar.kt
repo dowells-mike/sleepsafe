@@ -9,10 +9,11 @@ import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.sleepsafe.BottomNavItem
+import com.example.sleepsafe.BottomNavItems
 
 @Composable
 fun BottomNavigationBar(navController: NavHostController) {
-    val items = listOf(BottomNavItem.Home, BottomNavItem.Analysis, BottomNavItem.Settings)
+    val items = BottomNavItems
     NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
@@ -34,3 +35,4 @@ fun BottomNavigationBar(navController: NavHostController) {
         }
     }
 }
+
