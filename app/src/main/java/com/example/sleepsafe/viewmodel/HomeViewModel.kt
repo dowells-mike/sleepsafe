@@ -6,10 +6,12 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.sleepsafe.utils.AudioRecorder
 import kotlin.math.sqrt
 
 class HomeViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -20,6 +22,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
 
     private val _motionState = MutableLiveData<String>()
     val motionState: LiveData<String> get() = _motionState
+
+    private val audioRecorder = AudioRecorder(application)
+    private val _isRecording = MutableLiveData<Boolean>()
+    val isRecording: LiveData<Boolean> get() = _isRecording
+
+    private val _audioFilePath = MutableLiveData<String?>()
+    val audioFilePath: LiveData<String?> get() = _audioFilePath
 
     // Variables for gravity removal (high-pass filter)
     private val gravity = FloatArray(3) { 0f }
@@ -37,6 +46,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
 
     private fun stopAccelerometerTracking() {
         sensorManager.unregisterListener(this)
+    }
+
+    fun startAudioRecording() {
+        try {
+            _isRecording.postValue(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                _audioFilePath.postValue(audioRecorder.startRecording())
+            }
+        } catch (e: Exception) {
+            _isRecording.postValue(false)
+            e.printStackTrace()
+        }
+    }
+
+    fun stopAudioRecording() {
+        _isRecording.postValue(false)
+        audioRecorder.stopRecording()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -77,5 +103,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     override fun onCleared() {
         super.onCleared()
         stopAccelerometerTracking()
+        stopAudioRecording()
     }
 }
