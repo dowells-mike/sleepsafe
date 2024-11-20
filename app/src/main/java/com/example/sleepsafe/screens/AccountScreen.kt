@@ -17,7 +17,7 @@ fun AccountScreen(accountViewModel: AccountViewModel = viewModel()) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "Account Settings Screen",
+            text = "Account Screen",
             fontSize = 24.sp
         )
     }
