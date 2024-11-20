@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -13,27 +14,27 @@ import kotlin.math.sqrt
 
 class HomeViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
-    // Sensor manager and accelerometer
     private val sensorManager: SensorManager =
         application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-    // LiveData to expose the motion state (e.g., movement detected)
     private val _motionState = MutableLiveData<String>()
     val motionState: LiveData<String> get() = _motionState
+
+    // Rolling average for smoother movement detection
+    private var rollingAverage = 0f
+    private val alpha = 0.8f // Smoothing factor (0.0 = no smoothing, 1.0 = full smoothing)
 
     init {
         startAccelerometerTracking()
     }
 
-    // Start listening to accelerometer events
     private fun startAccelerometerTracking() {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
     }
 
-    // Stop listening to accelerometer events (cleanup when ViewModel is cleared)
     private fun stopAccelerometerTracking() {
         sensorManager.unregisterListener(this)
     }
@@ -41,21 +42,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
 
-        // Calculate movement magnitude
+        // Calculate magnitude of acceleration
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
-        val magnitude = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
+        val magnitude = sqrt(x * x + y * y + z * z)
 
-        // Update motion state based on a threshold
-        val movementThreshold = 1.5f
+        // Apply rolling average to smooth data
+        rollingAverage = alpha * rollingAverage + (1 - alpha) * magnitude
+
+        // Log the raw and smoothed values (for debugging)
+        Log.d("HomeViewModel", "Raw: $magnitude, Smoothed: $rollingAverage")
+
+        // Update state based on smoothed magnitude
+        val movementThreshold = 2.0f // Increased threshold for better testing
         _motionState.postValue(
-            if (magnitude > movementThreshold) "Movement Detected" else "No Movement"
+            if (rollingAverage > movementThreshold) "Movement Detected" else "No Movement"
         )
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // We don't need to handle accuracy changes in this implementation
+        // No implementation needed
     }
 
     override fun onCleared() {
