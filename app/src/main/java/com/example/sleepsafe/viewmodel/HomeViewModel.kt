@@ -1,19 +1,27 @@
 package com.example.sleepsafe.viewmodel
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import androidx.lifecycle.AndroidViewModel
+import android.app.PendingIntent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.sleepsafe.utils.AlarmReceiver
 import com.example.sleepsafe.utils.AudioRecorder
+import java.util.Calendar
 import kotlin.math.sqrt
 
+@SuppressLint("StaticFieldLeak")
 class HomeViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
     private val sensorManager: SensorManager =
@@ -33,6 +41,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     // Variables for gravity removal (high-pass filter)
     private val gravity = FloatArray(3) { 0f }
     private val linearAcceleration = FloatArray(3) { 0f }
+
+    //Alarm variables and values
+    private val context: Context = getApplication<Application>().applicationContext
+    private val _alarmTime = MutableLiveData<Long?>()
+    val alarmTime: LiveData<Long?> get() = _alarmTime
 
     init {
         startAccelerometerTracking()
@@ -104,5 +117,67 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
         super.onCleared()
         stopAccelerometerTracking()
         stopAudioRecording()
+    }
+
+    //function to set an alarm
+    fun setAlarm(hour: Int, minute: Int, useSmartAlarm: Boolean) {
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("useSmartAlarm", useSmartAlarm)
+            putExtra("alarmTime", calendar.timeInMillis)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (useSmartAlarm) {
+            alarmManager.setExactAndAllowWhileIdle(
+                android.app.AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis - 30 * 60 * 1000, // Start range 30 minutes before
+                pendingIntent
+            )
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(
+                android.app.AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        }
+
+        _alarmTime.postValue(calendar.timeInMillis)
+        Log.d("HomeViewModel", "Alarm set for: ${calendar.time}")
+    }
+
+    //function to cancel alarm
+    fun cancelAlarm() {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = Intent(context, AlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+        _alarmTime.postValue(null)
+        Log.d("HomeViewModel", "Alarm canceled")
+    }
+
+    @SuppressLint("NewApi")
+    fun hasExactAlarmPermission(): Boolean {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return alarmManager.canScheduleExactAlarms()
+    }
+
+    @SuppressLint("InlinedApi")
+    fun requestExactAlarmPermission() {
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
     }
 }
