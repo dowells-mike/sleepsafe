@@ -22,10 +22,11 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     val motionState by homeViewModel.motionState.observeAsState("No Movement")
 
     // Alarm observables
-    val alarmTime by homeViewModel.alarmTime.observeAsState()
-    var hour by remember { mutableIntStateOf(7) }
-    var minute by remember { mutableIntStateOf(30) }
+    var hour by remember { mutableStateOf(0) }
+    var minute by remember { mutableStateOf(0) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var useSmartAlarm by remember { mutableStateOf(false) }
+    val alarmTime by homeViewModel.alarmTime.observeAsState()
 
     //Test for recording audio and accelerometer sensor
 //    Column(
@@ -64,7 +65,41 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(text = "Set Alarm")
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Display current selected time
+        Text(
+            text = if (hour == 0 && minute == 0) {
+                "No time selected"
+            } else {
+                "Selected Time: %02d:%02d".format(hour, minute)
+            }
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Button to open the time picker
+        Button(onClick = { showTimePicker = true }) {
+            Text("Pick Time")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Time picker dialog
+        if (showTimePicker) {
+            TimePickerDialog(
+                initialHour = hour,
+                initialMinute = minute,
+                onTimeSelected = { selectedHour, selectedMinute ->
+                    hour = selectedHour
+                    minute = selectedMinute
+                    showTimePicker = false
+                },
+                onDismiss = { showTimePicker = false }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         if (!homeViewModel.hasExactAlarmPermission()) {
             Text(text = "Permission required to set exact alarms.")
@@ -79,7 +114,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                     homeViewModel.setAlarm(hour, minute, useSmartAlarm)
                     Toast.makeText(
                         homeViewModel.getApplication(),
-                        "Alarm set for $hour:$minute",
+                        "Alarm set for %02d:%02d".format(hour, minute),
                         Toast.LENGTH_SHORT
                     ).show()
                 }) {
@@ -97,6 +132,15 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                     Text("Cancel Alarm")
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        if (alarmTime != null) {
+            Text(
+                text = "Alarm Set for: ${
+                    Calendar.getInstance().apply { timeInMillis = alarmTime!! }.time
+                }"
+            )
         }
     }
 }
