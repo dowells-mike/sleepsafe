@@ -1,17 +1,20 @@
 package com.example.sleepsafe.screens
 
+import android.annotation.SuppressLint
+import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sleepsafe.viewmodel.HomeViewModel
-import android.widget.Toast
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.getValue
 import java.util.*
 
 @Composable
@@ -28,35 +31,9 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     var useSmartAlarm by remember { mutableStateOf(false) }
     val alarmTime by homeViewModel.alarmTime.observeAsState()
 
-    //Test for recording audio and accelerometer sensor
-//    Column(
-//        modifier = Modifier
-//            .fillMaxSize()
-//            .padding(16.dp),
-//        horizontalAlignment = Alignment.CenterHorizontally,
-//        verticalArrangement = Arrangement.Center
-//    ) {
-//        Text(text = "SleepSafe")
-//        Spacer(modifier = Modifier.height(16.dp))
-//        Text(text = "Motion: $motionState")
-//        Spacer(modifier = Modifier.height(16.dp))
-//        Text(text = if (isRecording) "Recording Audio..." else "Audio Recording Stopped")
-//        Spacer(modifier = Modifier.height(16.dp))
-//        Text(text = "Audio File: ${audioFilePath ?: "No file"}")
-//
-//        Spacer(modifier = Modifier.height(16.dp))
-//        if (isRecording) {
-//            Button(onClick = { homeViewModel.stopAudioRecording() }) {
-//                Text(text = "Stop Audio Recording")
-//            }
-//        } else {
-//            Button(onClick = { homeViewModel.startAudioRecording() }) {
-//                Text(text = "Start Audio Recording")
-//            }
-//        }
-//    }
+    // Enable Notification Dialog State
+    var showNotificationSettings by remember { mutableStateOf(false) }
 
-    // Layout for alarm
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -64,7 +41,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "Set an Alarm", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+        Text(text = "Set an Alarm", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
         // Show Alarm Info
@@ -91,6 +68,13 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             Text(text = "Cancel Alarm")
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Enable Notifications Button
+        Button(onClick = { showNotificationSettings = true }) {
+            Text(text = "Enable Notifications")
+        }
+
         // Time Picker Dialog
         if (showTimePicker) {
             TimePickerDialog(
@@ -108,5 +92,39 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                 onDismiss = { showTimePicker = false }
             )
         }
+
+        // Notification Settings Dialog
+        if (showNotificationSettings) {
+            AlertDialog(
+                onDismissRequest = { showNotificationSettings = false },
+                title = { Text("Enable Notifications") },
+                text = {
+                    Text("Notifications are required for alarms to work correctly. Please enable notifications for SleepSafe in the app settings.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showNotificationSettings = false
+                        homeViewModel.getApplication<Application>().openNotificationSettings()
+                    }) {
+                        Text("Go to Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNotificationSettings = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
+}
+
+@SuppressLint("InlinedApi")
+fun Context.openNotificationSettings() {
+    val intent = Intent().apply {
+        action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+        putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK // Add this flag
+    }
+    startActivity(intent)
 }
