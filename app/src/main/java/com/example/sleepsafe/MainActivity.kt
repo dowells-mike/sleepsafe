@@ -9,8 +9,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.sleepsafe.components.BottomNavigationBar
 import com.example.sleepsafe.components.NavHostContainer
@@ -31,10 +33,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(activity: ComponentActivity) {
-    // Create and remember a NavController for navigation
     val navController = rememberNavController()
 
-    // Use Scaffold to structure the top bar, content, and bottom navigation
+    // Observe the current route
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -42,10 +46,12 @@ fun MainScaffold(activity: ComponentActivity) {
             )
         },
         bottomBar = {
-            BottomNavigationBar(navController = navController)
+            // Show BottomNavigationBar only for main app routes
+            if (currentRoute != "welcome") {
+                BottomNavigationBar(navController = navController)
+            }
         }
     ) { innerPadding ->
-        // Pass activity and navigation setup to NavHostContainer
         NavHostContainer(
             navController = navController,
             activity = activity,
@@ -53,3 +59,4 @@ fun MainScaffold(activity: ComponentActivity) {
         )
     }
 }
+
