@@ -64,82 +64,48 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "Set Alarm")
+        Text(text = "Set an Alarm", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Display current selected time
-        Text(
-            text = if (hour == 0 && minute == 0) {
-                "No time selected"
-            } else {
-                "Selected Time: %02d:%02d".format(hour, minute)
-            }
-        )
+        // Show Alarm Info
+        if (alarmTime != null) {
+            val calendar = Calendar.getInstance().apply { timeInMillis = alarmTime!! }
+            Text(text = "Alarm set for: ${calendar.time}")
+        } else {
+            Text(text = "No alarm set")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Set Alarm Button
+        Button(onClick = { showTimePicker = true }) {
+            Text(text = "Set Alarm")
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Button to open the time picker
-        Button(onClick = { showTimePicker = true }) {
-            Text("Pick Time")
+        // Cancel Alarm Button
+        Button(onClick = {
+            homeViewModel.cancelAlarm()
+            Toast.makeText(homeViewModel.getApplication(), "Alarm Canceled", Toast.LENGTH_SHORT).show()
+        }) {
+            Text(text = "Cancel Alarm")
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Time picker dialog
+        // Time Picker Dialog
         if (showTimePicker) {
             TimePickerDialog(
-                initialHour = hour,
-                initialMinute = minute,
-                onTimeSelected = { selectedHour, selectedMinute ->
-                    hour = selectedHour
-                    minute = selectedMinute
+                initialHour = 7,
+                initialMinute = 30,
+                onTimeSelected = { hour, minute ->
+                    homeViewModel.setAlarm(hour, minute, useSmartAlarm = false)
+                    Toast.makeText(
+                        homeViewModel.getApplication(),
+                        "Alarm set for $hour:$minute",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     showTimePicker = false
                 },
                 onDismiss = { showTimePicker = false }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (!homeViewModel.hasExactAlarmPermission()) {
-            Text(text = "Permission required to set exact alarms.")
-            Button(onClick = {
-                homeViewModel.requestExactAlarmPermission()
-            }) {
-                Text("Grant Permission")
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = {
-                    homeViewModel.setAlarm(hour, minute, useSmartAlarm)
-                    Toast.makeText(
-                        homeViewModel.getApplication(),
-                        "Alarm set for %02d:%02d".format(hour, minute),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }) {
-                    Text("Set Alarm")
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Button(onClick = {
-                    homeViewModel.cancelAlarm()
-                    Toast.makeText(
-                        homeViewModel.getApplication(),
-                        "Alarm Canceled",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }) {
-                    Text("Cancel Alarm")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        if (alarmTime != null) {
-            Text(
-                text = "Alarm Set for: ${
-                    Calendar.getInstance().apply { timeInMillis = alarmTime!! }.time
-                }"
             )
         }
     }
