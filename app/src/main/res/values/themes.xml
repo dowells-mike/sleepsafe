@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.Sleepsafe" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Add the custom Alarm Dialog theme -->
+    <style name="Theme.Sleepsafe.AlarmDialog" parent="android:Theme.Material.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+    </style>
 </resources>

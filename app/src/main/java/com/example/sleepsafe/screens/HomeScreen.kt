@@ -41,70 +41,30 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "Set an Alarm", style = MaterialTheme.typography.titleLarge)
+        Text("Set an Alarm", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show Alarm Info
         if (alarmTime != null) {
             val calendar = Calendar.getInstance().apply { timeInMillis = alarmTime!! }
-            Text(text = "Alarm set for: ${calendar.time}")
+            Text("Alarm set for: ${calendar.time}")
         } else {
-            Text(text = "No alarm set")
+            Text("No alarm set")
         }
+
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Set Alarm Button
-        Button(onClick = { showTimePicker = true }) {
-            Text(text = "Set Alarm")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Cancel Alarm Button
-        Button(onClick = {
-            homeViewModel.cancelAlarm()
-            Toast.makeText(homeViewModel.getApplication(), "Alarm Canceled", Toast.LENGTH_SHORT).show()
-        }) {
-            Text(text = "Cancel Alarm")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Enable Notifications Button
         Button(onClick = { showNotificationSettings = true }) {
-            Text(text = "Enable Notifications")
+            Text("Enable Notifications")
         }
 
-        // Time Picker Dialog
-        if (showTimePicker) {
-            TimePickerDialog(
-                initialHour = 7,
-                initialMinute = 30,
-                onTimeSelected = { hour, minute ->
-                    homeViewModel.setAlarm(hour, minute, useSmartAlarm = false)
-                    Toast.makeText(
-                        homeViewModel.getApplication(),
-                        "Alarm set for $hour:$minute",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    showTimePicker = false
-                },
-                onDismiss = { showTimePicker = false }
-            )
-        }
-
-        // Notification Settings Dialog
         if (showNotificationSettings) {
             AlertDialog(
                 onDismissRequest = { showNotificationSettings = false },
                 title = { Text("Enable Notifications") },
-                text = {
-                    Text("Notifications are required for alarms to work correctly. Please enable notifications for SleepSafe in the app settings.")
-                },
+                text = { Text("Please enable notifications for SleepSafe to ensure alarms work correctly.") },
                 confirmButton = {
                     TextButton(onClick = {
+                        homeViewModel.requestExactAlarmPermission()
                         showNotificationSettings = false
-                        homeViewModel.getApplication<Application>().openNotificationSettings()
                     }) {
                         Text("Go to Settings")
                     }

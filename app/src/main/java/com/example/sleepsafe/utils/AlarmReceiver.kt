@@ -12,6 +12,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.sleepsafe.AlarmActivity
 import com.example.sleepsafe.MainActivity
 import com.example.sleepsafe.R
 
@@ -36,6 +37,12 @@ class AlarmReceiver : BroadcastReceiver() {
             ringtone = RingtoneManager.getRingtone(context, alarmSound)
             ringtone?.play()
         }
+
+        // Fullscreen intent
+        val fullScreenIntent = Intent(context, AlarmActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        context.startActivity(fullScreenIntent)
 
         // Create notification
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

@@ -122,19 +122,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
 
     //function to set an alarm
     fun setAlarm(hour: Int, minute: Int, useSmartAlarm: Boolean) {
-
         val currentTime = Calendar.getInstance()
-
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
             if (before(currentTime)) {
-                add(Calendar.DAY_OF_MONTH, 1) // Set for the next day
+                add(Calendar.DAY_OF_MONTH, 1) // Ensure the alarm is set for the next day if past
             }
         }
 
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        if (!hasExactAlarmPermission()) {
+            requestExactAlarmPermission()
+            return
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("useSmartAlarm", useSmartAlarm)
             putExtra("alarmTime", calendar.timeInMillis)
@@ -144,23 +147,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
             context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        if (useSmartAlarm) {
-            alarmManager.setExactAndAllowWhileIdle(
-                android.app.AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis - 30 * 60 * 1000, // Start range 30 minutes before
-                pendingIntent
-            )
-        } else {
-            alarmManager.setExactAndAllowWhileIdle(
-                android.app.AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis,
-                pendingIntent
-            )
-        }
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            pendingIntent
+        )
 
         _alarmTime.postValue(calendar.timeInMillis)
         Log.d("HomeViewModel", "Alarm set for: ${calendar.time}")
     }
+
 
     //function to cancel alarm
     fun cancelAlarm() {
