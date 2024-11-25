@@ -3,10 +3,8 @@ package com.example.sleepsafe.screens
 import android.app.TimePickerDialog
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
-import java.util.*
 
 @Composable
 fun TimePickerDialog(
@@ -16,8 +14,9 @@ fun TimePickerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val timePickerDialog = remember {
-        TimePickerDialog(
+
+    DisposableEffect(Unit) {
+        val timePickerDialog = TimePickerDialog(
             context,
             { _, hourOfDay, minute ->
                 onTimeSelected(hourOfDay, minute)
@@ -26,10 +25,12 @@ fun TimePickerDialog(
             initialMinute,
             true
         )
-    }
 
-    timePickerDialog.setOnCancelListener { onDismiss() }
-    CompositionLocalProvider(LocalContext provides context) {
+        timePickerDialog.setOnCancelListener { onDismiss() }
         timePickerDialog.show()
+
+        onDispose {
+            timePickerDialog.dismiss()
+        }
     }
 }

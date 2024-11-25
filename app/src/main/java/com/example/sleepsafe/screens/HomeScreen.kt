@@ -3,7 +3,7 @@ package com.example.sleepsafe.screens
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
-import android.content.Intent
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -14,25 +14,21 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sleepsafe.viewmodel.HomeViewModel
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.getValue
 import java.util.*
 
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     // Observing LiveData properties as Compose states
-    val isRecording by homeViewModel.isRecording.observeAsState(false)
-    val audioFilePath by homeViewModel.audioFilePath.observeAsState()
-    val motionState by homeViewModel.motionState.observeAsState("No Movement")
-
-    // Alarm observables
-    var hour by remember { mutableStateOf(0) }
-    var minute by remember { mutableStateOf(0) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var useSmartAlarm by remember { mutableStateOf(false) }
     val alarmTime by homeViewModel.alarmTime.observeAsState()
+    val permissionRequired by homeViewModel.permissionRequired.observeAsState(false)
 
-    // Enable Notification Dialog State
-    var showNotificationSettings by remember { mutableStateOf(false) }
+    // Dialog state
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    // Variables to store selected time
+    var hour by remember { mutableStateOf(7) } // Default hour
+    var minute by remember { mutableStateOf(30) } // Default minute
 
     Column(
         modifier = Modifier
@@ -44,17 +40,25 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         Text(text = "Set an Alarm", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show Alarm Info
+        // Display Alarm Time or No Alarm Text
         if (alarmTime != null) {
             val calendar = Calendar.getInstance().apply { timeInMillis = alarmTime!! }
             Text(text = "Alarm set for: ${calendar.time}")
         } else {
             Text(text = "No alarm set")
         }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Set Alarm Button
-        Button(onClick = { showTimePicker = true }) {
+        Button(onClick = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && permissionRequired) {
+                showPermissionDialog = true
+            } else {
+                showPermissionDialog = false
+                showTimePicker = true // Show the time picker dialog
+            }
+        }) {
             Text(text = "Set Alarm")
         }
 
@@ -68,19 +72,36 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             Text(text = "Cancel Alarm")
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Enable Notifications Button
-        Button(onClick = { showNotificationSettings = true }) {
-            Text(text = "Enable Notifications")
+        // Permission Dialog
+        if (showPermissionDialog) {
+            AlertDialog(
+                onDismissRequest = { showPermissionDialog = false },
+                title = { Text("Permission Required") },
+                text = { Text("This app needs permission to schedule exact alarms.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        homeViewModel.requestExactAlarmPermission()
+                        showPermissionDialog = false
+                    }) {
+                        Text("Grant Permission")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPermissionDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Time Picker Dialog
         if (showTimePicker) {
             TimePickerDialog(
-                initialHour = 7,
-                initialMinute = 30,
-                onTimeSelected = { hour, minute ->
+                initialHour = hour,
+                initialMinute = minute,
+                onTimeSelected = { selectedHour, selectedMinute ->
+                    hour = selectedHour
+                    minute = selectedMinute
                     homeViewModel.setAlarm(hour, minute, useSmartAlarm = false)
                     Toast.makeText(
                         homeViewModel.getApplication(),
@@ -92,39 +113,5 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                 onDismiss = { showTimePicker = false }
             )
         }
-
-        // Notification Settings Dialog
-        if (showNotificationSettings) {
-            AlertDialog(
-                onDismissRequest = { showNotificationSettings = false },
-                title = { Text("Enable Notifications") },
-                text = {
-                    Text("Notifications are required for alarms to work correctly. Please enable notifications for SleepSafe in the app settings.")
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showNotificationSettings = false
-                        homeViewModel.getApplication<Application>().openNotificationSettings()
-                    }) {
-                        Text("Go to Settings")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNotificationSettings = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
     }
-}
-
-@SuppressLint("InlinedApi")
-fun Context.openNotificationSettings() {
-    val intent = Intent().apply {
-        action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
-        putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK // Add this flag
-    }
-    startActivity(intent)
 }
