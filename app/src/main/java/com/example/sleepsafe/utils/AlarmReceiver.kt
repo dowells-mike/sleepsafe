@@ -1,6 +1,7 @@
 package com.example.sleepsafe.utils
 
 import android.annotation.SuppressLint
+import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -13,6 +14,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.sleepsafe.R
+import com.example.sleepsafe.viewmodel.HomeViewModel
 
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -28,6 +30,14 @@ class AlarmReceiver : BroadcastReceiver() {
     @SuppressLint("NotificationPermission")
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
+
+        // Stop logic of the alarm
+        if (intent?.action == "com.example.sleepsafe.CANCEL_ALARM") {
+            Log.d("AlarmReceiver", "Canceling alarm from StopReceiver")
+            val homeViewModel = HomeViewModel(context.applicationContext as Application)
+            homeViewModel.cancelAlarm()
+            return
+        }
 
         // Alarm ringtone
         if (ringtone == null) {

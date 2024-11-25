@@ -114,11 +114,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     fun setAlarm(hour: Int, minute: Int, useSmartAlarm: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!hasExactAlarmPermission()) {
-                // Set permissionRequired only when permission is not granted
                 _permissionRequired.postValue(true)
                 return
             } else {
-                // Reset permissionRequired if permission is granted
                 _permissionRequired.postValue(false)
             }
         }
@@ -148,19 +146,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
             pendingIntent
         )
 
+        // Save alarm time to SharedPreferences
+        val sharedPreferences = context.getSharedPreferences("SleepSafePrefs", Context.MODE_PRIVATE)
+        sharedPreferences.edit().putLong("alarmTime", calendar.timeInMillis).apply()
+
         _alarmTime.postValue(calendar.timeInMillis)
         Log.d("HomeViewModel", "Alarm set for: ${calendar.time}")
     }
 
     fun cancelAlarm() {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val pendingIntent = android.app.PendingIntent.getBroadcast(
+            context, 0, intent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
         _alarmTime.postValue(null)
+        Log.d("HomeViewModel", "Alarm canceled")
     }
+
+
+    // Reset alarm to none
+    fun resetAlarm() {
+        val sharedPreferences = context.getSharedPreferences("SleepSafePrefs", Context.MODE_PRIVATE)
+        sharedPreferences.edit().putLong("alarmTime", -1).apply()
+        _alarmTime.postValue(null)
+        Log.d("HomeViewModel", "Alarm reset to none")
+    }
+
+    // Load alarm time from SharedPreferences
+    fun loadAlarmTime() {
+        val sharedPreferences = context.getSharedPreferences("SleepSafePrefs", Context.MODE_PRIVATE)
+        val savedAlarmTime = sharedPreferences.getLong("alarmTime", -1)
+        if (savedAlarmTime != -1L) {
+            _alarmTime.postValue(savedAlarmTime)
+        } else {
+            _alarmTime.postValue(null)
+        }
+    }
+
 
     @SuppressLint("NewApi")
     fun hasExactAlarmPermission(): Boolean {
@@ -175,4 +199,5 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
         }
         context.startActivity(intent)
     }
+
 }

@@ -1,8 +1,5 @@
 package com.example.sleepsafe.screens
 
-import android.annotation.SuppressLint
-import android.app.Application
-import android.content.Context
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -18,6 +15,12 @@ import java.util.*
 
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
+
+    // Load saved alarm time
+    LaunchedEffect(Unit) {
+        homeViewModel.loadAlarmTime()
+    }
+
     // Observing LiveData properties as Compose states
     val alarmTime by homeViewModel.alarmTime.observeAsState()
     val permissionRequired by homeViewModel.permissionRequired.observeAsState(false)
