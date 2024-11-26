@@ -21,7 +21,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     val selectedDate: LiveData<Date> get() = _selectedDate
 
     // Load sleep data for the selected date
-    fun loadSleepDataForDate(date: Date) {
+    private fun loadSleepDataForDate(date: Date) {
         val calendarStart = Calendar.getInstance().apply {
             time = date
             set(Calendar.HOUR_OF_DAY, 0)
