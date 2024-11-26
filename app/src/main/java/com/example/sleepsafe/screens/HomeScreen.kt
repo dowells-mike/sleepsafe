@@ -11,110 +11,206 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sleepsafe.viewmodel.HomeViewModel
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.platform.LocalContext
+import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
 
-    // Load saved alarm time
-    LaunchedEffect(Unit) {
-        homeViewModel.loadAlarmTime()
-    }
+    val context = LocalContext.current
 
     // Observing LiveData properties as Compose states
+    val sleepTime by homeViewModel.sleepTime.observeAsState()
+    val isTracking by homeViewModel.isTracking.observeAsState(false)
     val alarmTime by homeViewModel.alarmTime.observeAsState()
     val permissionRequired by homeViewModel.permissionRequired.observeAsState(false)
 
-    // Dialog state
+    // Dialog states
     var showPermissionDialog by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var showAlarmTimePicker by remember { mutableStateOf(false) }
+    var showSleepTimePicker by remember { mutableStateOf(false) }
 
     // Variables to store selected time
-    var hour by remember { mutableStateOf(7) } // Default hour
-    var minute by remember { mutableStateOf(30) } // Default minute
+    var alarmHour by remember { mutableStateOf(7) } // Default alarm hour
+    var alarmMinute by remember { mutableStateOf(30) } // Default alarm minute
 
+    // Format sleep time and alarm time for display
+    val sleepTimeFormatted = sleepTime?.let {
+        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it.time)
+    } ?: "Not Set"
+
+    val alarmTimeFormatted = alarmTime?.let {
+        val calendar = Calendar.getInstance().apply { timeInMillis = it }
+        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
+    } ?: "Not Set"
+
+    // UI Layout
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Set an Alarm", style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Display Alarm Time or No Alarm Text
-        if (alarmTime != null) {
-            val calendar = Calendar.getInstance().apply { timeInMillis = alarmTime!! }
-            Text(text = "Alarm set for: ${calendar.time}")
-        } else {
-            Text(text = "No alarm set")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Set Alarm Button
-        Button(onClick = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && permissionRequired) {
-                showPermissionDialog = true
-            } else {
-                showPermissionDialog = false
-                showTimePicker = true // Show the time picker dialog
+        // Alarm Section
+        AlarmSection(
+            alarmTimeFormatted = alarmTimeFormatted,
+            onSetAlarmClick = {
+                if (permissionRequired) {
+                    showPermissionDialog = true
+                } else {
+                    showAlarmTimePicker = true
+                }
+            },
+            onCancelAlarmClick = {
+                homeViewModel.cancelAlarm()
+                Toast.makeText(context, "Alarm Canceled", Toast.LENGTH_SHORT).show()
             }
-        }) {
+        )
+
+        // Sleep Time Section
+        SleepTimeSection(
+            sleepTimeFormatted = sleepTimeFormatted,
+            onSetSleepTimeClick = { showSleepTimePicker = true },
+            onClearSleepTimeClick = {
+                if (sleepTime != null) {
+                    homeViewModel.clearSleepTime()
+                    Toast.makeText(context, "Sleep Time Cleared", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "No Sleep Time Set", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+
+        // Tracking Section
+        TrackingSection(
+            isTracking = isTracking,
+            onStartTrackingClick = {
+                homeViewModel.startTrackingNow(context)
+                Toast.makeText(context, "Sleep Tracking Started", Toast.LENGTH_SHORT).show()
+            },
+            onStopTrackingClick = {
+                homeViewModel.stopTracking(context)
+                Toast.makeText(context, "Sleep Tracking Stopped", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // Permission Dialog
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("Permission Required") },
+            text = { Text("This app needs permission to schedule exact alarms.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    homeViewModel.requestExactAlarmPermission()
+                    showPermissionDialog = false
+                }) {
+                    Text("Grant Permission")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Alarm Time Picker Dialog
+    if (showAlarmTimePicker) {
+        TimePickerDialog(
+            initialHour = alarmHour,
+            initialMinute = alarmMinute,
+            onTimeSelected = { selectedHour, selectedMinute ->
+                alarmHour = selectedHour
+                alarmMinute = selectedMinute
+                homeViewModel.setAlarm(alarmHour, alarmMinute, useSmartAlarm = false)
+                Toast.makeText(
+                    context,
+                    "Alarm set for $alarmHour:$alarmMinute",
+                    Toast.LENGTH_SHORT
+                ).show()
+                showAlarmTimePicker = false
+            },
+            onDismiss = { showAlarmTimePicker = false }
+        )
+    }
+
+    // Sleep Time Picker Dialog
+    if (showSleepTimePicker) {
+        TimePickerDialog(
+            initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+            initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
+            onTimeSelected = { selectedHour, selectedMinute ->
+                homeViewModel.setSleepTime(selectedHour, selectedMinute)
+                Toast.makeText(
+                    context,
+                    "Sleep Time set for $selectedHour:$selectedMinute",
+                    Toast.LENGTH_SHORT
+                ).show()
+                showSleepTimePicker = false
+            },
+            onDismiss = { showSleepTimePicker = false }
+        )
+    }
+}
+
+@Composable
+fun AlarmSection(
+    alarmTimeFormatted: String,
+    onSetAlarmClick: () -> Unit,
+    onCancelAlarmClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = "Alarm Time: $alarmTimeFormatted", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onSetAlarmClick) {
             Text(text = "Set Alarm")
         }
-
         Spacer(modifier = Modifier.height(8.dp))
-
-        // Cancel Alarm Button
-        Button(onClick = {
-            homeViewModel.cancelAlarm()
-            Toast.makeText(homeViewModel.getApplication(), "Alarm Canceled", Toast.LENGTH_SHORT).show()
-        }) {
+        Button(onClick = onCancelAlarmClick) {
             Text(text = "Cancel Alarm")
         }
+    }
+}
 
-        // Permission Dialog
-        if (showPermissionDialog) {
-            AlertDialog(
-                onDismissRequest = { showPermissionDialog = false },
-                title = { Text("Permission Required") },
-                text = { Text("This app needs permission to schedule exact alarms.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        homeViewModel.requestExactAlarmPermission()
-                        showPermissionDialog = false
-                    }) {
-                        Text("Grant Permission")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showPermissionDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
+@Composable
+fun SleepTimeSection(
+    sleepTimeFormatted: String,
+    onSetSleepTimeClick: () -> Unit,
+    onClearSleepTimeClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = "Sleep Time: $sleepTimeFormatted", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onSetSleepTimeClick) {
+            Text(text = "Set Sleep Time")
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onClearSleepTimeClick) {
+            Text(text = "Clear Sleep Time")
+        }
+    }
+}
 
-        // Time Picker Dialog
-        if (showTimePicker) {
-            TimePickerDialog(
-                initialHour = hour,
-                initialMinute = minute,
-                onTimeSelected = { selectedHour, selectedMinute ->
-                    hour = selectedHour
-                    minute = selectedMinute
-                    homeViewModel.setAlarm(hour, minute, useSmartAlarm = false)
-                    Toast.makeText(
-                        homeViewModel.getApplication(),
-                        "Alarm set for $hour:$minute",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    showTimePicker = false
-                },
-                onDismiss = { showTimePicker = false }
-            )
+@Composable
+fun TrackingSection(
+    isTracking: Boolean,
+    onStartTrackingClick: () -> Unit,
+    onStopTrackingClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (!isTracking) {
+            Button(onClick = onStartTrackingClick) {
+                Text(text = "Start Tracking Now")
+            }
+        } else {
+            Button(onClick = onStopTrackingClick) {
+                Text(text = "Stop Tracking")
+            }
         }
     }
 }

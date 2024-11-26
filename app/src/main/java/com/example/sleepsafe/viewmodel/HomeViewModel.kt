@@ -16,8 +16,13 @@ import android.os.Build
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
+import com.example.sleepsafe.data.SleepData
+import com.example.sleepsafe.data.SleepDatabase
 import com.example.sleepsafe.utils.AlarmReceiver
 import com.example.sleepsafe.utils.AudioRecorder
+import com.example.sleepsafe.utils.SleepTrackingService
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import kotlin.math.sqrt
 
@@ -48,6 +53,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     private val _permissionRequired = MutableLiveData<Boolean>()
     val permissionRequired: LiveData<Boolean> get() = _permissionRequired
 
+    private val sleepDao = SleepDatabase.getDatabase(application).sleepDao()
+
+    private val _sleepTime = MutableLiveData<Calendar?>()
+    val sleepTime: LiveData<Calendar?> get() = _sleepTime
+
+    private val _isTracking = MutableLiveData<Boolean>(false)
+    val isTracking: LiveData<Boolean> get() = _isTracking
+
     init {
         startAccelerometerTracking()
     }
@@ -62,12 +75,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
         sensorManager.unregisterListener(this)
     }
 
+    // Function to start audio recording
     fun startAudioRecording() {
         try {
             _isRecording.postValue(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                _audioFilePath.postValue(audioRecorder.startRecording())
-            }
+            // FIX STARTS HERE
+            val filePath = audioRecorder.startRecording()
+            _audioFilePath.postValue(filePath)
+            // FIX ENDS HERE
         } catch (e: Exception) {
             _isRecording.postValue(false)
             e.printStackTrace()
@@ -166,14 +181,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     }
 
 
-    // Reset alarm to none
-    fun resetAlarm() {
-        val sharedPreferences = context.getSharedPreferences("SleepSafePrefs", Context.MODE_PRIVATE)
-        sharedPreferences.edit().putLong("alarmTime", -1).apply()
-        _alarmTime.postValue(null)
-        Log.d("HomeViewModel", "Alarm reset to none")
-    }
-
     // Load alarm time from SharedPreferences
     fun loadAlarmTime() {
         val sharedPreferences = context.getSharedPreferences("SleepSafePrefs", Context.MODE_PRIVATE)
@@ -185,6 +192,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
         }
     }
 
+    // Function to set sleep time
+    fun setSleepTime(hour: Int, minute: Int) {
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            if (before(Calendar.getInstance())) {
+                add(Calendar.DAY_OF_YEAR, 1) // Set for next day if time has passed
+            }
+        }
+        _sleepTime.postValue(calendar)
+        scheduleTracking(calendar)
+    }
+
+    // Function to clear sleep time
+    fun clearSleepTime() {
+        _sleepTime.postValue(null)
+        cancelScheduledTracking()
+    }
+
+    // Function to start tracking immediately
+    fun startTrackingNow(context: Context) {
+        _isTracking.postValue(true)
+        // Start Foreground Service
+        SleepTrackingService.startService(context)
+    }
+
+    // Function to stop tracking
+    fun stopTracking(context: Context) {
+        _isTracking.postValue(false)
+        // Stop Foreground Service
+        SleepTrackingService.stopService(context)
+    }
+
+    // Schedule tracking at sleep time
+    private fun scheduleTracking(calendar: Calendar) {
+        // Implement scheduling logic if needed
+    }
+
+    // Cancel scheduled tracking
+    private fun cancelScheduledTracking() {
+        // Implement cancellation logic if needed
+    }
+
+    // Function to save sleep data to Room database
+    fun saveSleepData(sleepData: List<SleepData>) {
+        viewModelScope.launch {
+            sleepDao.insertAll(sleepData)
+        }
+    }
 
     @SuppressLint("NewApi")
     fun hasExactAlarmPermission(): Boolean {

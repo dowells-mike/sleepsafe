@@ -5,7 +5,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SleepDao {
@@ -14,5 +13,5 @@ interface SleepDao {
     suspend fun insertAll(sleepData: List<SleepData>)
 
     @Query("SELECT * FROM sleep_data WHERE timestamp BETWEEN :startTime AND :endTime")
-    fun getSleepDataBetween(startTime: Long, endTime: Long): Flow<List<SleepData>>
+    suspend fun getSleepDataBetween(startTime: Long, endTime: Long): List<SleepData>
 }

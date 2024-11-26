@@ -23,7 +23,7 @@ fun TimePickerDialog(
             },
             initialHour,
             initialMinute,
-            true
+            false
         )
 
         timePickerDialog.setOnCancelListener { onDismiss() }
