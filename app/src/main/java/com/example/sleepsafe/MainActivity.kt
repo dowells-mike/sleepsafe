@@ -1,3 +1,4 @@
+// MainActivity.kt
 package com.example.sleepsafe
 
 import android.os.Bundle
@@ -16,18 +17,27 @@ import com.example.sleepsafe.components.BottomNavigationBar
 import com.example.sleepsafe.components.NavHostContainer
 import com.example.sleepsafe.ui.theme.SleepsafeTheme
 
+/**
+ * The main entry point of the SleepSafe app, hosting the entire app UI.
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             SleepsafeTheme {
-                // Directly use Scaffold with NavHostContainer
+                // Use the main scaffold layout
                 MainScaffold(this)
             }
         }
     }
 }
 
+/**
+ * Composable function to set up the app's main structure, including a top bar, bottom navigation bar,
+ * and navigation host for managing screen transitions.
+ *
+ * @param activity The parent activity, used for permission and lifecycle management.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(activity: ComponentActivity) {

@@ -1,3 +1,4 @@
+// SnoozeReceiver.kt
 package com.example.sleepsafe.utils
 
 import android.annotation.SuppressLint
@@ -9,6 +10,10 @@ import android.content.Intent
 import android.util.Log
 import java.util.*
 
+/**
+ * BroadcastReceiver to handle snooze functionality for alarms.
+ * Schedules a new alarm 2 minutes after the snooze action is triggered.
+ */
 class SnoozeReceiver : BroadcastReceiver() {
     @SuppressLint("ScheduleExactAlarm")
     override fun onReceive(context: Context?, intent: Intent?) {
@@ -21,7 +26,7 @@ class SnoozeReceiver : BroadcastReceiver() {
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-        // Create a new alarm intent
+        // Create a new alarm intent for snoozing
         val snoozeIntent = Intent(context, AlarmReceiver::class.java)
         val snoozePendingIntent = PendingIntent.getBroadcast(
             context, 0, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

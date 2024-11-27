@@ -1,3 +1,4 @@
+// AccountScreen.kt
 package com.example.sleepsafe.screens
 
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sleepsafe.viewmodel.AccountViewModel
 
+/**
+ * Displays the Account screen, where users can view and manage their account details.
+ */
 @Composable
 fun AccountScreen(accountViewModel: AccountViewModel = viewModel()) {
     Box(

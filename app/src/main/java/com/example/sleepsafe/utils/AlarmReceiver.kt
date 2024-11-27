@@ -1,3 +1,4 @@
+// AlarmReceiver.kt
 package com.example.sleepsafe.utils
 
 import android.annotation.SuppressLint
@@ -16,11 +17,17 @@ import androidx.core.app.NotificationCompat
 import com.example.sleepsafe.R
 import com.example.sleepsafe.viewmodel.HomeViewModel
 
+/**
+ * BroadcastReceiver to handle alarm events, including playing an alarm sound and showing notifications.
+ */
 class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
         private var ringtone: Ringtone? = null
 
+        /**
+         * Stops the currently playing alarm sound.
+         */
         fun stopAlarm() {
             ringtone?.stop()
             ringtone = null
@@ -31,7 +38,7 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
 
-        // Stop logic of the alarm
+        // Handle alarm cancellation
         if (intent?.action == "com.example.sleepsafe.CANCEL_ALARM") {
             Log.d("AlarmReceiver", "Canceling alarm from StopReceiver")
             val homeViewModel = HomeViewModel(context.applicationContext as Application)
@@ -39,17 +46,18 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        // Alarm ringtone
+        // Play the alarm sound
         if (ringtone == null) {
             val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ringtone = RingtoneManager.getRingtone(context, alarmSound)
             ringtone?.play()
         }
 
-        // Create notification
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Create a notification
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Create notification channel (Android 8+)
+        // Create notification channel (required for Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "alarm_channel",
@@ -59,7 +67,6 @@ class AlarmReceiver : BroadcastReceiver() {
                 description = "Notifications for alarms"
                 setBypassDnd(true) // Allow overriding Do Not Disturb
             }
-            channel.description = "Notifications for alarms"
             notificationManager.createNotificationChannel(channel)
         }
 
@@ -75,9 +82,9 @@ class AlarmReceiver : BroadcastReceiver() {
             context, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Build notification
+        // Build the notification
         val notification = NotificationCompat.Builder(context, "alarm_channel")
-            .setSmallIcon(R.drawable.ic_alarm) // Add your alarm icon
+            .setSmallIcon(R.drawable.ic_alarm) // Replace with your app's alarm icon
             .setContentTitle("Wake Up!")
             .setContentText("Your alarm is ringing!")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

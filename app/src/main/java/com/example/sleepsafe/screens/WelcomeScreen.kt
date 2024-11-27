@@ -1,3 +1,4 @@
+// WelcomeScreen.kt
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -12,9 +13,15 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.sleepsafe.utils.PermissionsHelper
 
+/**
+ * Displays the Welcome screen with an introduction to the app's features and a "Get Started" button.
+ *
+ * @param navController The NavController for navigating between screens.
+ * @param activity The ComponentActivity for managing permissions and lifecycle.
+ */
 @Composable
 fun WelcomeScreen(navController: NavController, activity: ComponentActivity) {
-    // Pager state to manage current page
+    // Pager state to manage the current page in the horizontal pager
     val pagerState = rememberPagerState(pageCount = { 3 }) // Number of pages in the pager
 
     Column(
@@ -24,7 +31,7 @@ fun WelcomeScreen(navController: NavController, activity: ComponentActivity) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Pager composable to swipe between pages
+        // Horizontal pager for swiping through feature pages
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f) // Take up remaining space
@@ -52,6 +59,12 @@ fun WelcomeScreen(navController: NavController, activity: ComponentActivity) {
     }
 }
 
+/**
+ * A composable function to display individual feature pages in the welcome screen.
+ *
+ * @param title The title of the feature.
+ * @param description The description of the feature.
+ */
 @Composable
 fun FeaturePage(title: String, description: String) {
     Column(
@@ -66,4 +79,3 @@ fun FeaturePage(title: String, description: String) {
         Text(text = description, style = MaterialTheme.typography.bodyMedium)
     }
 }
-

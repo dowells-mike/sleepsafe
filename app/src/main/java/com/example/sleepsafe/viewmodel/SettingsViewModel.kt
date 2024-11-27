@@ -1,7 +1,11 @@
+// SettingsViewModel.kt
 package com.example.sleepsafe.viewmodel
 
 import androidx.lifecycle.ViewModel
 
+/**
+ * ViewModel to handle data and logic for the Settings screen.
+ */
 class SettingsViewModel : ViewModel() {
-    // LiveData or state management for SettingsScreen can be added here
+    // Add LiveData or state management for SettingsScreen here as needed.
 }

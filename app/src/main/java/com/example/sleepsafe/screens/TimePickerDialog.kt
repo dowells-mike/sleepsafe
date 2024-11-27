@@ -1,3 +1,4 @@
+// TimePickerDialog.kt
 package com.example.sleepsafe.screens
 
 import android.app.TimePickerDialog
@@ -6,6 +7,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 
+/**
+ * A composable function to display a native Android TimePickerDialog for selecting a time.
+ *
+ * @param initialHour The initial hour displayed in the dialog.
+ * @param initialMinute The initial minute displayed in the dialog.
+ * @param onTimeSelected Callback invoked when the user selects a time.
+ * @param onDismiss Callback invoked when the dialog is dismissed without selecting a time.
+ */
 @Composable
 fun TimePickerDialog(
     initialHour: Int,
@@ -23,9 +32,10 @@ fun TimePickerDialog(
             },
             initialHour,
             initialMinute,
-            false
+            false // Indicates a 12-hour clock format
         )
 
+        // Handle dismissal of the dialog
         timePickerDialog.setOnCancelListener { onDismiss() }
         timePickerDialog.show()
 

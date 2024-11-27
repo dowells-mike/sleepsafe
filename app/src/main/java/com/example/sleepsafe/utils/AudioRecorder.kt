@@ -1,20 +1,28 @@
 // AudioRecorder.kt
 package com.example.sleepsafe.utils
 
-import android.app.Application
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Environment
 import java.io.File
 import java.io.IOException
 
+/**
+ * A utility class for recording audio during sleep tracking.
+ *
+ * @param context The application context for accessing file storage.
+ */
 class AudioRecorder(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: String? = null
 
+    /**
+     * Starts audio recording and returns the output file path.
+     *
+     * @return The absolute path of the recorded audio file.
+     */
     fun startRecording(): String? {
-        // Create a file in the external files directory
         val audioFile = File(
             context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
             "sleep_audio_${System.currentTimeMillis()}.3gp"
@@ -36,10 +44,12 @@ class AudioRecorder(private val context: Context) {
             }
         }
 
-        // Return the output file path
         return outputFile
     }
 
+    /**
+     * Stops audio recording and releases resources.
+     */
     fun stopRecording() {
         mediaRecorder?.apply {
             try {
@@ -52,6 +62,11 @@ class AudioRecorder(private val context: Context) {
         mediaRecorder = null
     }
 
+    /**
+     * Returns the maximum amplitude recorded since the last call to this method.
+     *
+     * @return The maximum amplitude value.
+     */
     fun getMaxAmplitude(): Int {
         return mediaRecorder?.maxAmplitude ?: 0
     }

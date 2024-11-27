@@ -19,11 +19,13 @@ import com.example.sleepsafe.R
 import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.data.SleepDatabase
 import kotlinx.coroutines.*
-import kotlinx.coroutines.NonCancellable.isActive
-import java.util.*
 import kotlin.coroutines.coroutineContext
 import kotlin.math.sqrt
 
+/**
+ * Service for tracking sleep using accelerometer and audio data.
+ * Runs in the background as a foreground service.
+ */
 class SleepTrackingService : Service(), SensorEventListener {
 
     private val coroutineScope = CoroutineScope(Dispatchers.Default)
@@ -40,6 +42,9 @@ class SleepTrackingService : Service(), SensorEventListener {
     companion object {
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
 
+        /**
+         * Starts the SleepTrackingService.
+         */
         fun startService(context: Context) {
             val startIntent = Intent(context, SleepTrackingService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -49,6 +54,9 @@ class SleepTrackingService : Service(), SensorEventListener {
             }
         }
 
+        /**
+         * Stops the SleepTrackingService.
+         */
         fun stopService(context: Context) {
             val stopIntent = Intent(context, SleepTrackingService::class.java)
             context.stopService(stopIntent)
@@ -71,9 +79,7 @@ class SleepTrackingService : Service(), SensorEventListener {
         stopTracking()
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startTracking() {
         // Start accelerometer tracking
@@ -83,9 +89,7 @@ class SleepTrackingService : Service(), SensorEventListener {
         // Start audio recording
         audioRecorder.startRecording()
         // Start collecting data
-        coroutineScope.launch {
-            collectSleepData()
-        }
+        coroutineScope.launch { collectSleepData() }
     }
 
     private fun stopTracking() {
@@ -93,25 +97,21 @@ class SleepTrackingService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         // Stop audio recording
         audioRecorder.stopRecording()
-        // Save data and wait for completion
-        runBlocking {
-            saveSleepData()
-        }
-        // Cancel the coroutine scope
+        // Save data and clean up
+        runBlocking { saveSleepData() }
         coroutineScope.cancel()
     }
 
     private suspend fun saveSleepData() {
         withContext(Dispatchers.IO) {
             sleepDao.insertAll(sleepDataList)
-            // Add logging to confirm data saving
             Log.d("SleepTrackingService", "Saved ${sleepDataList.size} data points to the database.")
         }
     }
 
     private suspend fun collectSleepData() {
         try {
-            while (true) {
+            while (coroutineContext.isActive) {
                 val currentTime = System.currentTimeMillis()
                 val audioLevel = audioRecorder.getMaxAmplitude()
                 val motionLevel = calculateMotionLevel()
@@ -122,18 +122,15 @@ class SleepTrackingService : Service(), SensorEventListener {
                     audioLevel = audioLevel.toFloat()
                 )
                 sleepDataList.add(sleepData)
-                // Add logging
-                Log.d("SleepTrackingService", "Collected data point at $currentTime: motion=$motionLevel, audioLevel=$audioLevel")
-                delay(1000) // Adjust the delay as needed
+                Log.d("SleepTrackingService", "Collected data: time=$currentTime, motion=$motionLevel, audio=$audioLevel")
+                delay(1000) // Collect data every second
             }
         } catch (e: CancellationException) {
-            // Coroutine was cancelled
-            Log.d("SleepTrackingService", "collectSleepData coroutine was cancelled")
+            Log.d("SleepTrackingService", "Data collection coroutine was cancelled.")
         }
     }
 
     private fun calculateMotionLevel(): Float {
-        // Calculate motion level based on accelerometer data
         return sqrt(
             linearAcceleration[0] * linearAcceleration[0] +
                     linearAcceleration[1] * linearAcceleration[1] +
@@ -142,13 +139,12 @@ class SleepTrackingService : Service(), SensorEventListener {
     }
 
     private fun getNotification(): Notification {
-        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("SleepSafe is tracking your sleep")
             .setSmallIcon(R.drawable.ic_sleep)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(Notification.CATEGORY_SERVICE)
-
-        return notificationBuilder.build()
+            .build()
     }
 
     private fun createNotificationChannel() {
@@ -163,7 +159,6 @@ class SleepTrackingService : Service(), SensorEventListener {
         }
     }
 
-    // SensorEventListener methods
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
 
