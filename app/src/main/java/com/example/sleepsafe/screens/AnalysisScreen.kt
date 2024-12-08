@@ -94,6 +94,9 @@ fun DateSelector(selectedDate: Date, onDateSelected: (Date) -> Unit) {
 @Composable
 fun SleepQualityView(sleepData: List<SleepData>) {
     val sleepQuality = calculateSleepQuality(sleepData)
+    val motionLevels = sleepData.map { it.motion }
+    val audioLevels = sleepData.map { it.audioLevel }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         CircularProgressIndicator(
             progress = { sleepQuality / 100f },
@@ -104,6 +107,8 @@ fun SleepQualityView(sleepData: List<SleepData>) {
         Column {
             Text("Time in Bed: ${formatDuration(sleepData)}")
             Text("Time Asleep: ${formatDuration(sleepData)}")
+            Text("Average Motion: ${motionLevels.average()}")
+            Text("Average Noise: ${audioLevels.average()}")
         }
     }
 }
@@ -135,14 +140,12 @@ fun SnoreAnalysisView(sleepData: List<SleepData>) {
  */
 @Composable
 fun SleepAdditionalDataView(sleepData: List<SleepData>) {
-    val wentToBedAt = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(sleepData.first().timestamp))
-    val wokeUpAt = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(sleepData.last().timestamp))
-    val snoreTime = calculateSnoreTime(sleepData)
+    val motionLevels = sleepData.map { it.motion }
+    val audioLevels = sleepData.map { it.audioLevel }
 
     Column {
-        Text("Snore: $snoreTime minutes")
-        Text("Went to bed at: $wentToBedAt")
-        Text("Woke up at: $wokeUpAt")
+        Text("Motion Levels: $motionLevels")
+        Text("Audio Levels: $audioLevels")
     }
 }
 

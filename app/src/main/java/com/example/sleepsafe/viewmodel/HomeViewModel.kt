@@ -3,17 +3,17 @@ package com.example.sleepsafe.viewmodel
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.Application
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
-import androidx.lifecycle.AndroidViewModel
-import android.app.PendingIntent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -29,36 +29,26 @@ import kotlin.math.sqrt
 @SuppressLint("StaticFieldLeak")
 class HomeViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
-    private val sensorManager: SensorManager =
-        application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val sensorManager: SensorManager =application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-
     private val _motionState = MutableLiveData<String>()
     val motionState: LiveData<String> get() = _motionState
-
     private val audioRecorder = AudioRecorder(application)
     private val _isRecording = MutableLiveData<Boolean>()
     val isRecording: LiveData<Boolean> get() = _isRecording
-
     private val _audioFilePath = MutableLiveData<String?>()
     val audioFilePath: LiveData<String?> get() = _audioFilePath
-
     private val gravity = FloatArray(3) { 0f }
     private val linearAcceleration = FloatArray(3) { 0f }
-
     private val context: Context = getApplication<Application>().applicationContext
     private val _alarmTime = MutableLiveData<Long?>()
     val alarmTime: LiveData<Long?> get() = _alarmTime
-
     private val _permissionRequired = MutableLiveData<Boolean>()
     val permissionRequired: LiveData<Boolean> get() = _permissionRequired
-
     private val sleepDao = SleepDatabase.getDatabase(application).sleepDao()
-
     private val _sleepTime = MutableLiveData<Calendar?>()
     val sleepTime: LiveData<Calendar?> get() = _sleepTime
-
-    private val _isTracking = MutableLiveData<Boolean>(false)
+    private val _isTracking = MutableLiveData(false)
     val isTracking: LiveData<Boolean> get() = _isTracking
 
     init {
@@ -89,7 +79,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
         }
     }
 
-    fun stopAudioRecording() {
+    private fun stopAudioRecording() {
         _isRecording.postValue(false)
         audioRecorder.stopRecording()
     }
@@ -170,10 +160,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     fun cancelAlarm() {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        val alarmManager =
+            context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java)
-        val pendingIntent = android.app.PendingIntent.getBroadcast(
-            context, 0, intent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
         _alarmTime.postValue(null)
@@ -237,10 +231,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     // Function to save sleep data to Room database
-    fun saveSleepData(sleepData: List<SleepData>) {
+    fun insertSleepData(sleepData: SleepData) {
         viewModelScope.launch {
-            sleepDao.insertAll(sleepData)
+            sleepDao.insertAll(listOf(sleepData))
         }
+    }
+
+    fun getSleepDataBetween(startTime: Long, endTime: Long): LiveData<List<SleepData>> {
+        val liveData = MutableLiveData<List<SleepData>>()
+        viewModelScope.launch {
+            val data = sleepDao.getSleepDataBetween(startTime, endTime)
+            liveData.postValue(data)
+        }
+        return liveData
     }
 
     @SuppressLint("NewApi")

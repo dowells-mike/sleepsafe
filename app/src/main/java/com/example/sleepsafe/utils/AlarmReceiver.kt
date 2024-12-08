@@ -73,13 +73,19 @@ class AlarmReceiver : BroadcastReceiver() {
         // Snooze action
         val snoozeIntent = Intent(context, SnoozeReceiver::class.java)
         val snoozePendingIntent = PendingIntent.getBroadcast(
-            context, 0, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            0,
+            snoozeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         // Stop action
         val stopIntent = Intent(context, StopReceiver::class.java)
         val stopPendingIntent = PendingIntent.getBroadcast(
-            context, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         // Build the notification

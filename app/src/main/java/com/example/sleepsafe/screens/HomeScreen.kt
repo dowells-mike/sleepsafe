@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sleepsafe.utils.SleepTrackingService
 import com.example.sleepsafe.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -88,10 +89,12 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             isTracking = isTracking,
             onStartTrackingClick = {
                 homeViewModel.startTrackingNow(context)
+                SleepTrackingService.startService(context)
                 Toast.makeText(context, "Sleep Tracking Started", Toast.LENGTH_SHORT).show()
             },
             onStopTrackingClick = {
                 homeViewModel.stopTracking(context)
+                SleepTrackingService.stopService(context)
                 Toast.makeText(context, "Sleep Tracking Stopped", Toast.LENGTH_SHORT).show()
             }
         )

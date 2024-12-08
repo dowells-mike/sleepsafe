@@ -17,10 +17,8 @@ import java.util.*
 class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sleepDao = SleepDatabase.getDatabase(application).sleepDao()
-
     private val _sleepData = MutableLiveData<List<SleepData>>()
     val sleepData: LiveData<List<SleepData>> get() = _sleepData
-
     private val _selectedDate = MutableLiveData<Date>(Date())
     val selectedDate: LiveData<Date> get() = _selectedDate
 

@@ -18,7 +18,15 @@ import androidx.core.app.NotificationCompat
 import com.example.sleepsafe.R
 import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.data.SleepDatabase
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlin.math.sqrt
 
@@ -105,7 +113,10 @@ class SleepTrackingService : Service(), SensorEventListener {
     private suspend fun saveSleepData() {
         withContext(Dispatchers.IO) {
             sleepDao.insertAll(sleepDataList)
-            Log.d("SleepTrackingService", "Saved ${sleepDataList.size} data points to the database.")
+            Log.d(
+                "SleepTrackingService",
+                "Saved ${sleepDataList.size} data points to the database."
+            )
         }
     }
 
@@ -122,7 +133,14 @@ class SleepTrackingService : Service(), SensorEventListener {
                     audioLevel = audioLevel.toFloat()
                 )
                 sleepDataList.add(sleepData)
-                Log.d("SleepTrackingService", "Collected data: time=$currentTime, motion=$motionLevel, audio=$audioLevel")
+
+                // Save data to database
+                coroutineScope.launch {
+                    sleepDao.insertAll(sleepDataList)
+                    Log.d("SleepTrackingService", "Saved ${sleepDataList.size} data points to the database.")
+                    sleepDataList.clear()
+                }
+
                 delay(1000) // Collect data every second
             }
         } catch (e: CancellationException) {
