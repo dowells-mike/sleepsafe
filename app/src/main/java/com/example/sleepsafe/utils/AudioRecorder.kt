@@ -48,7 +48,7 @@ class AudioRecorder(private val context: Context) {
     }
 
     /**
-     * Stops audio recording and releases resources.
+     * Stops audio recording and releases resources.                                                                                                       o recording and releases resources.
      */
     fun stopRecording() {
         mediaRecorder?.apply {

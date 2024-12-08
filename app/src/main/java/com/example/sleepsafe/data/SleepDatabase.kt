@@ -35,7 +35,9 @@ abstract class SleepDatabase : RoomDatabase() {
                     context.applicationContext,
                     SleepDatabase::class.java,
                     "sleep_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration() // Add migration strategy
+                    .build()
                 INSTANCE = instance
                 instance
             }

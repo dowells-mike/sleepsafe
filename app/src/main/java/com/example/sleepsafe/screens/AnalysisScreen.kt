@@ -96,7 +96,7 @@ fun SleepQualityView(sleepData: List<SleepData>) {
     val sleepQuality = calculateSleepQuality(sleepData)
     Row(verticalAlignment = Alignment.CenterVertically) {
         CircularProgressIndicator(
-            progress = sleepQuality / 100f,
+            progress = { sleepQuality / 100f },
             modifier = Modifier.size(100.dp),
             strokeWidth = 8.dp,
         )
