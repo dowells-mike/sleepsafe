@@ -3,25 +3,16 @@ package com.example.sleepsafe.utils
 
 import android.content.Context
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Environment
 import java.io.File
 import java.io.IOException
 
-/**
- * A utility class for recording audio during sleep tracking.
- *
- * @param context The application context for accessing file storage.
- */
 class AudioRecorder(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: String? = null
 
-    /**
-     * Starts audio recording and returns the output file path.
-     *
-     * @return The absolute path of the recorded audio file.
-     */
     fun startRecording(): String? {
         val audioFile = File(
             context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
@@ -29,7 +20,11 @@ class AudioRecorder(private val context: Context) {
         )
         outputFile = audioFile.absolutePath
 
-        mediaRecorder = MediaRecorder().apply {
+        mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(context)
+        } else {
+            MediaRecorder()
+        }.apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
             setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
@@ -47,9 +42,6 @@ class AudioRecorder(private val context: Context) {
         return outputFile
     }
 
-    /**
-     * Stops audio recording and releases resources.                                                                                                       o recording and releases resources.
-     */
     fun stopRecording() {
         mediaRecorder?.apply {
             try {
@@ -62,11 +54,6 @@ class AudioRecorder(private val context: Context) {
         mediaRecorder = null
     }
 
-    /**
-     * Returns the maximum amplitude recorded since the last call to this method.
-     *
-     * @return The maximum amplitude value.
-     */
     fun getMaxAmplitude(): Int {
         return mediaRecorder?.maxAmplitude ?: 0
     }

@@ -25,35 +25,30 @@ import java.util.*
  */
 @Composable
 fun AnalysisScreen(analysisViewModel: AnalysisViewModel = viewModel()) {
-    val sleepData by analysisViewModel.sleepData.observeAsState()
+    val sleepData by analysisViewModel.sleepData.observeAsState(emptyList()) // Default to empty list
     val selectedDate by analysisViewModel.selectedDate.observeAsState(Date())
 
-    if (sleepData.isNullOrEmpty()) {
-        // Display a message when no sleep data is available
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("No sleep data available for the selected date.")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        DateSelector(selectedDate) { date ->
+            analysisViewModel.updateSelectedDate(date)
         }
-    } else {
-        // Display sleep insights and analysis
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            DateSelector(selectedDate) { date ->
-                analysisViewModel.updateSelectedDate(date)
-            }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Display a message when no sleep data is available for that day
+        if (sleepData.isEmpty()) {
+            Text("No sleep data available for the selected date.")
+        } else {
+            SleepQualityView(sleepData)
             Spacer(modifier = Modifier.height(16.dp))
-            SleepQualityView(sleepData!!)
+            SleepGraphView(sleepData)
             Spacer(modifier = Modifier.height(16.dp))
-            SleepGraphView(sleepData!!)
+            SnoreAnalysisView(sleepData)
             Spacer(modifier = Modifier.height(16.dp))
-            SnoreAnalysisView(sleepData!!)
-            Spacer(modifier = Modifier.height(16.dp))
-            SleepAdditionalDataView(sleepData!!)
+            SleepAdditionalDataView(sleepData)
         }
     }
 }
@@ -166,6 +161,8 @@ fun calculateSleepQuality(sleepData: List<SleepData>): Int {
  * @return A formatted duration string (e.g., "7h 30m").
  */
 fun formatDuration(sleepData: List<SleepData>): String {
+    if (sleepData.isEmpty()) return "0h 0m" // Handle empty list case
+
     val durationMillis = sleepData.last().timestamp - sleepData.first().timestamp
     val hours = (durationMillis / (1000 * 60 * 60)).toInt()
     val minutes = ((durationMillis / (1000 * 60)) % 60).toInt()

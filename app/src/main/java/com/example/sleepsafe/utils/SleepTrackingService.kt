@@ -18,16 +18,12 @@ import androidx.core.app.NotificationCompat
 import com.example.sleepsafe.R
 import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.data.SleepDatabase
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 import kotlin.math.sqrt
 
 /**
@@ -36,8 +32,8 @@ import kotlin.math.sqrt
  */
 class SleepTrackingService : Service(), SensorEventListener {
 
-    private val coroutineScope = CoroutineScope(Dispatchers.Default)
-    private val sleepDataList = mutableListOf<SleepData>()
+    private val job = Job()
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + job) // Use IO dispatcher
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
@@ -49,6 +45,8 @@ class SleepTrackingService : Service(), SensorEventListener {
 
     companion object {
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
+        private const val ACCELEROMETER_UPDATE_INTERVAL = 1000L // 1 second
+        private const val AUDIO_UPDATE_INTERVAL = 1000L // 1 second
 
         /**
          * Starts the SleepTrackingService.
@@ -92,7 +90,12 @@ class SleepTrackingService : Service(), SensorEventListener {
     private fun startTracking() {
         // Start accelerometer tracking
         accelerometer?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager.registerListener(
+                this,
+                it,
+                SensorManager.SENSOR_DELAY_NORMAL,
+                ACCELEROMETER_UPDATE_INTERVAL.toInt() * 1000 // Convert to microseconds
+            )
         }
         // Start audio recording
         audioRecorder.startRecording()
@@ -105,46 +108,29 @@ class SleepTrackingService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         // Stop audio recording
         audioRecorder.stopRecording()
-        // Save data and clean up
-        runBlocking { saveSleepData() }
-        coroutineScope.cancel()
-    }
-
-    private suspend fun saveSleepData() {
-        withContext(Dispatchers.IO) {
-            sleepDao.insertAll(sleepDataList)
-            Log.d(
-                "SleepTrackingService",
-                "Saved ${sleepDataList.size} data points to the database."
-            )
-        }
+        // Cancel the coroutine
+        job.cancel()
     }
 
     private suspend fun collectSleepData() {
-        try {
-            while (coroutineContext.isActive) {
-                val currentTime = System.currentTimeMillis()
-                val audioLevel = audioRecorder.getMaxAmplitude()
-                val motionLevel = calculateMotionLevel()
+        while (true) { // Use a loop for continuous data collection
+            val currentTime = System.currentTimeMillis()
+            val audioLevel = audioRecorder.getMaxAmplitude().toFloat()
+            val motionLevel = calculateMotionLevel()
 
-                val sleepData = SleepData(
-                    timestamp = currentTime,
-                    motion = motionLevel,
-                    audioLevel = audioLevel.toFloat()
-                )
-                sleepDataList.add(sleepData)
-
-                // Save data to database
-                coroutineScope.launch {
-                    sleepDao.insertAll(sleepDataList)
-                    Log.d("SleepTrackingService", "Saved ${sleepDataList.size} data points to the database.")
-                    sleepDataList.clear()
-                }
-
-                delay(1000) // Collect data every second
+            val sleepData = SleepData(
+                timestamp = currentTime,
+                motion = motionLevel,
+                audioLevel = audioLevel
+            )
+            // Insert into the database directly
+            withContext(Dispatchers.IO) {
+                sleepDao.insert(sleepData)
             }
-        } catch (e: CancellationException) {
-            Log.d("SleepTrackingService", "Data collection coroutine was cancelled.")
+
+            Log.d("SleepTrackingService", "Timestamp: $currentTime, Motion: $motionLevel, Audio: $audioLevel")
+
+            delay(AUDIO_UPDATE_INTERVAL) // Sample at specified interval
         }
     }
 

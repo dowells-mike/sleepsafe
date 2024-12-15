@@ -9,11 +9,6 @@ import com.example.sleepsafe.data.SleepDatabase
 import kotlinx.coroutines.launch
 import java.util.*
 
-/**
- * ViewModel to handle data and logic for the Analysis screen.
- *
- * @param application The application context for accessing the database.
- */
 class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sleepDao = SleepDatabase.getDatabase(application).sleepDao()
@@ -22,11 +17,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val _selectedDate = MutableLiveData<Date>(Date())
     val selectedDate: LiveData<Date> get() = _selectedDate
 
-    /**
-     * Loads sleep data for a specific date by querying the database.
-     *
-     * @param date The selected date.
-     */
+    init {
+        loadSleepDataForDate(Date()) // Load data for today initially
+    }
+
     private fun loadSleepDataForDate(date: Date) {
         val calendarStart = Calendar.getInstance().apply {
             time = date
@@ -50,16 +44,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val data = sleepDao.getSleepDataBetween(startTime, endTime)
             _sleepData.postValue(data)
             Log.d("AnalysisViewModel", "Retrieved ${data.size} data points for the selected date.")
+            for (item in data) {
+                Log.d("AnalysisViewModel", "Timestamp: ${item.timestamp}, Motion: ${item.motion}, Audio: ${item.audioLevel}")
+            }
         }
     }
 
-    /**
-     * Updates the selected date and loads corresponding sleep data.
-     *
-     * @param date The new selected date.
-     */
     fun updateSelectedDate(date: Date) {
-        _selectedDate.postValue(date)
+        _selectedDate.value = date
         loadSleepDataForDate(date)
     }
 }

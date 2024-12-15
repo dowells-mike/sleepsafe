@@ -1,46 +1,76 @@
 // TimePickerDialog.kt
 package com.example.sleepsafe.screens
 
-import android.app.TimePickerDialog
-import android.content.Context
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 /**
- * A composable function to display a native Android TimePickerDialog for selecting a time.
+ * Composable function to display a time picker dialog.
  *
- * @param initialHour The initial hour displayed in the dialog.
- * @param initialMinute The initial minute displayed in the dialog.
- * @param onTimeSelected Callback invoked when the user selects a time.
- * @param onDismiss Callback invoked when the dialog is dismissed without selecting a time.
+ * @param initialHour The initially selected hour.
+ * @param initialMinute The initially selected minute.
+ * @param onTimeSelected Callback for when a time is selected.
+ * @param onDismiss Callback for when the dialog is dismissed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimePickerDialog(
     initialHour: Int,
     initialMinute: Int,
-    onTimeSelected: (hour: Int, minute: Int) -> Unit,
+    onTimeSelected: (Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
+    var selectedHour by remember { mutableIntStateOf(initialHour) }
+    var selectedMinute by remember { mutableIntStateOf(initialMinute) }
+    var is24HourFormat by remember { mutableStateOf(true) }
 
-    DisposableEffect(Unit) {
-        val timePickerDialog = TimePickerDialog(
-            context,
-            { _, hourOfDay, minute ->
-                onTimeSelected(hourOfDay, minute)
-            },
-            initialHour,
-            initialMinute,
-            false // Indicates a 12-hour clock format
-        )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .width(IntrinsicSize.Min)
+                .background(MaterialTheme.colorScheme.background, shape = RoundedCornerShape(8.dp))
+                .padding(24.dp)
+        ) {
+            TimePicker(
+                state = TimePickerState(
+                    initialHour = selectedHour,
+                    initialMinute = selectedMinute,
+                    is24Hour = is24HourFormat
+                ),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
 
-        // Handle dismissal of the dialog
-        timePickerDialog.setOnCancelListener { onDismiss() }
-        timePickerDialog.show()
-
-        onDispose {
-            timePickerDialog.dismiss()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = {
+                    onTimeSelected(selectedHour, selectedMinute)
+                    onDismiss()
+                }) {
+                    Text("OK")
+                }
+            }
         }
     }
 }

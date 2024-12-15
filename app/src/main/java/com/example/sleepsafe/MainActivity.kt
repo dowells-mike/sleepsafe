@@ -6,25 +6,19 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import com.example.sleepsafe.components.BottomNavigationBar
-import com.example.sleepsafe.components.NavHostContainer
+import com.example.sleepsafe.data.SleepDatabase
+import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.ui.theme.SleepsafeTheme
 import kotlinx.coroutines.launch
-import com.example.sleepsafe.data.SleepData
-import com.example.sleepsafe.data.SleepDatabase
+import com.example.sleepsafe.components.NavHostContainer
+import com.example.sleepsafe.components.BottomNavigationBar
 
-/**
- * The main entry point of the SleepSafe app, hosting the entire app UI.
- */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,14 +29,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Test database insertion
+        // Test database insertion (Optional: You can keep this for testing)
+        /*
         lifecycleScope.launch {
             val database = SleepDatabase.getDatabase(applicationContext)
             val sleepDao = database.sleepDao()
 
             // Insert sample data
             val sampleData = SleepData(timestamp = System.currentTimeMillis(), motion = 1.5f, audioLevel = 0.8f)
-            sleepDao.insertAll(listOf(sampleData))
+            sleepDao.insert(sampleData)
 
             // Query data
             val startTime = System.currentTimeMillis() - 24 * 60 * 60 * 1000 // 24 hours ago
@@ -51,16 +46,10 @@ class MainActivity : ComponentActivity() {
 
             Log.d("DatabaseTest", "Inserted and Retrieved Data: $data")
         }
-
+         */
     }
 }
 
-/**
- * Composable function to set up the app's main structure, including a top bar, bottom navigation bar,
- * and navigation host for managing screen transitions.
- *
- * @param activity The parent activity, used for permission and lifecycle management.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(activity: ComponentActivity) {
