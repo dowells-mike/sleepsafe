@@ -116,6 +116,9 @@ interface SleepDao {
     @Query("DELETE FROM sleep_data WHERE sleepStart = :sleepStart")
     suspend fun deleteSleepSession(sleepStart: Long)
 
+    @Query("DELETE FROM sleep_data")
+    suspend fun deleteAllData()
+
     @Query("""
         DELETE FROM sleep_data 
         WHERE sleepStart NOT IN (

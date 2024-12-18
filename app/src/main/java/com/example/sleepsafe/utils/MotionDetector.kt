@@ -18,6 +18,7 @@ class MotionDetector(context: Context) : SensorEventListener {
     private var lastAcceleration = FloatArray(3)
     private var lastGyro = FloatArray(3)
     private var gravity = FloatArray(3)
+    private var sensitivity = 0.5f // Default sensitivity (range 0.1-1.0)
 
     // Moving average for smoothing
     private val accelerationWindow = FloatArray(WINDOW_SIZE) { 0f }
@@ -28,7 +29,12 @@ class MotionDetector(context: Context) : SensorEventListener {
         private const val TAG = "MotionDetector"
         private const val WINDOW_SIZE = 10
         private const val ALPHA = 0.8f // Low-pass filter constant
-        private const val MOTION_AMPLIFICATION = 3.0f // Amplify motion for better visibility
+        private const val MOTION_AMPLIFICATION = 3.0f // Base amplification factor
+    }
+
+    fun setSensitivity(value: Float) {
+        sensitivity = value.coerceIn(0.1f, 1.0f)
+        Log.d(TAG, "Motion sensitivity set to: $sensitivity")
     }
 
     @Synchronized
@@ -153,8 +159,8 @@ class MotionDetector(context: Context) : SensorEventListener {
             avgAcceleration
         }
 
-        // Amplify and normalize to 0-1 range
-        lastMotion = (combinedMotion * MOTION_AMPLIFICATION).coerceIn(0f, 1f)
+        // Apply sensitivity and amplification
+        lastMotion = (combinedMotion * sensitivity * MOTION_AMPLIFICATION).coerceIn(0f, 1f)
         Log.d(TAG, "Motion level: $lastMotion")
     }
 

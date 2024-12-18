@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
@@ -23,6 +24,7 @@ import kotlin.coroutines.coroutineContext
 
 class SleepTrackingService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var prefs: SharedPreferences
 
     private var motionDetector: MotionDetector? = null
     private var audioRecorder: AudioRecorder? = null
@@ -35,6 +37,13 @@ class SleepTrackingService : Service() {
     private var dataCollectionJob: Job? = null
     private var notificationJob: Job? = null
 
+    // Settings
+    private var motionSensitivity: Int = 5
+    private var audioSensitivity: Int = 5
+    private var updateInterval: Int = 5
+    private var useSmartAlarm: Boolean = true
+    private var smartAlarmWindow: Int = 30
+
     companion object {
         private const val TAG = "SleepTrackingService"
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
@@ -43,8 +52,8 @@ class SleepTrackingService : Service() {
         const val EXTRA_SLEEP_START = "sleepStart"
         const val EXTRA_ALARM_TIME = "alarmTime"
 
-        private const val DATA_UPDATE_INTERVAL = 5_000L // 5 seconds for testing
-        private const val NOTIFICATION_UPDATE_INTERVAL = 5_000L // 5 seconds for testing
+        private const val DEFAULT_UPDATE_INTERVAL = 5_000L // 5 seconds
+        private const val NOTIFICATION_UPDATE_INTERVAL = 5_000L // 5 seconds
 
         fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -64,7 +73,19 @@ class SleepTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
+        prefs = applicationContext.getSharedPreferences("sleep_settings", Context.MODE_PRIVATE)
+        loadSettings()
         initializeService()
+    }
+
+    private fun loadSettings() {
+        motionSensitivity = prefs.getInt("motion_sensitivity", 5)
+        audioSensitivity = prefs.getInt("audio_sensitivity", 5)
+        updateInterval = prefs.getInt("update_interval", 5)
+        useSmartAlarm = prefs.getBoolean("use_smart_alarm", true)
+        smartAlarmWindow = prefs.getInt("smart_alarm_window", 30)
+
+        Log.d(TAG, "Settings loaded - Motion: $motionSensitivity, Audio: $audioSensitivity, Interval: $updateInterval")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -121,8 +142,13 @@ class SleepTrackingService : Service() {
             createNotificationChannel()
             startForeground(NOTIFICATION_ID, createNotification())
 
-            motionDetector = MotionDetector(applicationContext)
-            audioRecorder = AudioRecorder(applicationContext)
+            motionDetector = MotionDetector(applicationContext).apply {
+                setSensitivity(motionSensitivity / 10f) // Convert 1-10 to 0.1-1.0
+            }
+
+            audioRecorder = AudioRecorder(applicationContext).apply {
+                setSensitivity(audioSensitivity / 10f) // Convert 1-10 to 0.1-1.0
+            }
 
             Log.d(TAG, "Service initialized successfully")
         } catch (e: Exception) {
@@ -214,16 +240,32 @@ class SleepTrackingService : Service() {
                 val currentTime = System.currentTimeMillis()
 
                 // Check if we've reached the alarm time
-                if (alarmTime > 0 && currentTime >= alarmTime) {
-                    Log.d(TAG, "Reached alarm time, stopping service")
-                    withContext(Dispatchers.Main) {
-                        stopSelf()
+                if (alarmTime > 0) {
+                    if (useSmartAlarm) {
+                        val windowStart = alarmTime - (smartAlarmWindow * 60 * 1000)
+                        if (currentTime >= windowStart) {
+                            // TODO: Implement smart alarm logic
+                            if (isLightSleep()) {
+                                Log.d(TAG, "Light sleep detected during smart alarm window, stopping service")
+                                withContext(Dispatchers.Main) {
+                                    stopSelf()
+                                }
+                                break
+                            }
+                        }
                     }
-                    break
+
+                    if (currentTime >= alarmTime) {
+                        Log.d(TAG, "Reached alarm time, stopping service")
+                        withContext(Dispatchers.Main) {
+                            stopSelf()
+                        }
+                        break
+                    }
                 }
 
                 // Only update if enough time has passed
-                if (currentTime - lastUpdateTime >= DATA_UPDATE_INTERVAL) {
+                if (currentTime - lastUpdateTime >= (updateInterval * 1000)) {
                     val motionLevel = motionDetector?.getMotionLevel() ?: 0f
                     val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
 
@@ -253,6 +295,15 @@ class SleepTrackingService : Service() {
         }
     }
 
+    private fun isLightSleep(): Boolean {
+        // Simple light sleep detection based on recent motion and sound
+        val motionLevel = motionDetector?.getMotionLevel() ?: 0f
+        val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
+
+        // Consider it light sleep if there's some movement or sound
+        return motionLevel > 0.2f || audioLevel > 0.2f
+    }
+
     private suspend fun updateNotificationPeriodically() {
         while (coroutineContext.isActive) {
             try {
@@ -280,6 +331,9 @@ class SleepTrackingService : Service() {
             append("Duration: ${hours}h ${minutes}m ${seconds}s")
             if (alarmTime > 0) {
                 append("\nAlarm: ${timeFormat.format(Date(alarmTime))}")
+                if (useSmartAlarm) {
+                    append(" (Smart)")
+                }
             }
             append("\nMotion: ${motionDetector?.getMotionLevel()?.format(2) ?: "0.00"}")
             append("\nNoise: ${audioRecorder?.getMaxAmplitude()?.format(2) ?: "0.00"}")

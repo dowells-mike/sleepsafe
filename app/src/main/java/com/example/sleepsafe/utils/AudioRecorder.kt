@@ -15,6 +15,7 @@ class AudioRecorder(private val context: Context) {
     private var recordingThread: Thread? = null
     private var lastAmplitude = 0.0f
     private var running = false
+    private var sensitivity = 0.5f // Default sensitivity (range 0.1-1.0)
 
     companion object {
         private const val TAG = "AudioRecorder"
@@ -27,6 +28,11 @@ class AudioRecorder(private val context: Context) {
             CHANNEL_CONFIG,
             AUDIO_FORMAT
         ) * BUFFER_SIZE_FACTOR
+    }
+
+    fun setSensitivity(value: Float) {
+        sensitivity = value.coerceIn(0.1f, 1.0f)
+        Log.d(TAG, "Audio sensitivity set to: $sensitivity")
     }
 
     @Synchronized
@@ -72,8 +78,8 @@ class AudioRecorder(private val context: Context) {
                             }
                             val rms = sqrt(sum / readSize)
 
-                            // Normalize to 0-1 range with some amplification
-                            lastAmplitude = ((rms / Short.MAX_VALUE) * 5).toFloat().coerceIn(0f, 1f)
+                            // Apply sensitivity and normalize to 0-1 range
+                            lastAmplitude = ((rms / Short.MAX_VALUE) * sensitivity * 5).toFloat().coerceIn(0f, 1f)
 
                             Log.d(TAG, "Audio level: $lastAmplitude")
                         }
