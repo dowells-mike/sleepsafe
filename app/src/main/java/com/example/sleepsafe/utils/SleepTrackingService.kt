@@ -8,10 +8,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -25,19 +21,16 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.coroutines.coroutineContext
 
-class SleepTrackingService : Service(), SensorEventListener {
+class SleepTrackingService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private var sensorManager: SensorManager? = null
-    private var accelerometer: Sensor? = null
+    private var motionDetector: MotionDetector? = null
     private var audioRecorder: AudioRecorder? = null
     private val sleepDao by lazy { SleepDatabase.getDatabase(applicationContext).sleepDao() }
-    private var sleepTracker: SleepTracker? = null
 
     private var sleepStartTime: Long = 0
     private var alarmTime: Long = 0
     private var lastUpdateTime: Long = 0
-    private var currentPhase: SleepTracker.SleepPhase = SleepTracker.SleepPhase.AWAKE
 
     private var dataCollectionJob: Job? = null
     private var notificationJob: Job? = null
@@ -128,20 +121,8 @@ class SleepTrackingService : Service(), SensorEventListener {
             createNotificationChannel()
             startForeground(NOTIFICATION_ID, createNotification())
 
-            sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-            if (sensorManager == null) {
-                Log.e(TAG, "Failed to get SensorManager")
-                stopSelf()
-                return
-            }
-
-            accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-            if (accelerometer == null) {
-                Log.e(TAG, "No accelerometer available")
-            }
-
+            motionDetector = MotionDetector(applicationContext)
             audioRecorder = AudioRecorder(applicationContext)
-            sleepTracker = SleepTracker()
 
             Log.d(TAG, "Service initialized successfully")
         } catch (e: Exception) {
@@ -160,14 +141,11 @@ class SleepTrackingService : Service(), SensorEventListener {
 
     private fun startTracking() {
         try {
-            // Start accelerometer tracking
-            accelerometer?.let { sensor ->
-                sensorManager?.registerListener(
-                    this,
-                    sensor,
-                    SensorManager.SENSOR_DELAY_NORMAL
-                )
-                Log.d(TAG, "Accelerometer tracking started")
+            // Start motion detection
+            if (motionDetector?.startDetecting() == true) {
+                Log.d(TAG, "Motion detection started")
+            } else {
+                Log.e(TAG, "Failed to start motion detection")
             }
 
             // Start audio recording
@@ -212,17 +190,17 @@ class SleepTrackingService : Service(), SensorEventListener {
             serviceScope.cancel()
             Log.d(TAG, "Coroutines cancelled")
 
-            // Stop accelerometer tracking
-            sensorManager?.unregisterListener(this)
-            Log.d(TAG, "Accelerometer tracking stopped")
+            // Stop motion detection
+            motionDetector?.stopDetecting()
+            Log.d(TAG, "Motion detection stopped")
 
             // Stop audio recording
             audioRecorder?.stopRecording()
             Log.d(TAG, "Audio recording stopped")
 
             // Clean up resources
+            motionDetector = null
             audioRecorder = null
-            sleepTracker = null
 
             Log.d(TAG, "Tracking stopped successfully")
         } catch (e: Exception) {
@@ -246,29 +224,23 @@ class SleepTrackingService : Service(), SensorEventListener {
 
                 // Only update if enough time has passed
                 if (currentTime - lastUpdateTime >= DATA_UPDATE_INTERVAL) {
-                    sleepTracker?.let { tracker ->
-                        val motionData = tracker.getLastMotionData()
-                        val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
-                        val audioData = tracker.processAudio(audioLevel)
+                    val motionLevel = motionDetector?.getMotionLevel() ?: 0f
+                    val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
 
-                        currentPhase = tracker.updateSleepPhase(motionData, audioData)
+                    val sleepData = SleepData(
+                        timestamp = currentTime,
+                        motion = motionLevel,
+                        audioLevel = audioLevel,
+                        sleepStart = sleepStartTime,
+                        alarmTime = alarmTime
+                    )
 
-                        val sleepData = SleepData(
-                            timestamp = currentTime,
-                            motion = motionData.magnitude,
-                            audioLevel = audioLevel,
-                            sleepStart = sleepStartTime,
-                            alarmTime = alarmTime,
-                            sleepPhase = currentPhase.name
-                        )
-
-                        withContext(Dispatchers.IO) {
-                            sleepDao.insert(sleepData)
-                        }
-
-                        lastUpdateTime = currentTime
-                        Log.d(TAG, "Sleep data collected - Motion: ${motionData.magnitude}, Audio: $audioLevel")
+                    withContext(Dispatchers.IO) {
+                        sleepDao.insert(sleepData)
                     }
+
+                    lastUpdateTime = currentTime
+                    Log.d(TAG, "Sleep data collected - Motion: $motionLevel, Audio: $audioLevel")
                 }
 
                 delay(1000) // Check every second
@@ -297,20 +269,6 @@ class SleepTrackingService : Service(), SensorEventListener {
         }
     }
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
-
-        try {
-            sleepTracker?.processMotion(event)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error processing sensor data", e)
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // No action needed
-    }
-
     private fun createNotification(): Notification {
         val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val sleepDuration = System.currentTimeMillis() - sleepStartTime
@@ -319,12 +277,11 @@ class SleepTrackingService : Service(), SensorEventListener {
         val seconds = (sleepDuration % (1000 * 60)) / 1000
 
         val contentText = buildString {
-            append("Sleep Phase: $currentPhase")
-            append("\nDuration: ${hours}h ${minutes}m ${seconds}s")
+            append("Duration: ${hours}h ${minutes}m ${seconds}s")
             if (alarmTime > 0) {
                 append("\nAlarm: ${timeFormat.format(Date(alarmTime))}")
             }
-            append("\nMotion: ${sleepTracker?.getLastMotionData()?.magnitude?.format(2) ?: "0.00"}")
+            append("\nMotion: ${motionDetector?.getMotionLevel()?.format(2) ?: "0.00"}")
             append("\nNoise: ${audioRecorder?.getMaxAmplitude()?.format(2) ?: "0.00"}")
         }
 

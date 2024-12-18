@@ -78,7 +78,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun setSleepTime(calendar: Calendar) {
         _sleepTime.postValue(calendar)
         Log.d(TAG, "Sleep time set: ${formatTime(calendar)}")
-        showToast("Sleep time set for ${formatTime(calendar)}")
+        showToast("Bedtime set for ${formatTime(calendar)}")
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -112,47 +112,76 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    @SuppressLint("NewApi")
-    fun startTrackingWithAlarm(context: Context, alarmTimestamp: Long) {
+    // For regular bedtime/alarm tracking
+    fun startTracking(context: Context) {
         try {
-            val sleepStartTime = System.currentTimeMillis()
-            _alarmTime.postValue(alarmTimestamp)
+            // Use set bedtime and alarm if available, otherwise use current time
+            val startTime = _sleepTime.value?.timeInMillis ?: System.currentTimeMillis()
+            val endTime = _alarmTime.value ?: (startTime + (8 * 60 * 60 * 1000)) // Default 8 hours
 
-            val intent = Intent(context, SleepTrackingService::class.java).apply {
-                putExtra(SleepTrackingService.EXTRA_SLEEP_START, sleepStartTime)
-                putExtra(SleepTrackingService.EXTRA_ALARM_TIME, alarmTimestamp)
-            }
-
-            SleepTrackingService.startService(context, intent)
-            _isTracking.postValue(true)
-            startDurationUpdates(sleepStartTime)
-
-            // Set the alarm
-            setAlarm(alarmTimestamp)
-
-            viewModelScope.launch {
-                try {
-                    val initialData = SleepData(
-                        timestamp = sleepStartTime,
-                        motion = 0f,
-                        audioLevel = 0f,
-                        sleepStart = sleepStartTime,
-                        alarmTime = alarmTimestamp,
-                        sleepPhase = SleepTracker.SleepPhase.AWAKE.name
-                    )
-                    sleepDao.insert(initialData)
-                    Log.d(TAG, "Initial sleep data inserted")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error inserting initial sleep data", e)
-                }
-            }
-
-            showToast("Sleep tracking started")
+            startTrackingInternal(context, startTime, endTime)
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tracking", e)
             showToast("Failed to start sleep tracking")
             _isTracking.postValue(false)
         }
+    }
+
+    // For quick test timers
+    fun startQuickTest(context: Context, durationMinutes: Int) {
+        try {
+            val startTime = System.currentTimeMillis()
+            val endTime = startTime + (durationMinutes * 60 * 1000)
+
+            // Don't override existing bedtime/alarm settings
+            val currentSleepTime = _sleepTime.value
+            val currentAlarmTime = _alarmTime.value
+
+            startTrackingInternal(context, startTime, endTime)
+
+            // Restore previous settings after starting tracking
+            _sleepTime.value = currentSleepTime
+            _alarmTime.value = currentAlarmTime
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting quick test", e)
+            showToast("Failed to start sleep tracking")
+            _isTracking.postValue(false)
+        }
+    }
+
+    @SuppressLint("NewApi")
+    private fun startTrackingInternal(context: Context, startTime: Long, endTime: Long) {
+        val intent = Intent(context, SleepTrackingService::class.java).apply {
+            putExtra(SleepTrackingService.EXTRA_SLEEP_START, startTime)
+            putExtra(SleepTrackingService.EXTRA_ALARM_TIME, endTime)
+        }
+
+        SleepTrackingService.startService(context, intent)
+        _isTracking.postValue(true)
+        startDurationUpdates(startTime)
+
+        // Set the alarm
+        setAlarm(endTime)
+
+        // Store initial data point
+        viewModelScope.launch {
+            try {
+                val initialData = SleepData(
+                    timestamp = startTime,
+                    motion = 0f,
+                    audioLevel = 0f,
+                    sleepStart = startTime,
+                    alarmTime = endTime,
+                    sleepPhase = SleepTracker.SleepPhase.AWAKE.name
+                )
+                sleepDao.insert(initialData)
+                Log.d(TAG, "Initial sleep data inserted")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error inserting initial sleep data", e)
+            }
+        }
+
+        showToast("Sleep tracking started")
     }
 
     fun stopTracking(context: Context) {

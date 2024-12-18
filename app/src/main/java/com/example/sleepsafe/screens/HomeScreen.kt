@@ -1,4 +1,3 @@
-// HomeScreen.kt
 package com.example.sleepsafe.screens
 
 import android.annotation.SuppressLint
@@ -79,7 +78,12 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                 isTracking = isTracking,
                 onStartTracking = {
                     if (!isTracking) {
-                        showQuickAlarmPicker = true
+                        // Use regular bedtime/alarm if set
+                        if (sleepTime != null || alarmTime != null) {
+                            homeViewModel.startTracking(context)
+                        } else {
+                            showQuickAlarmPicker = true
+                        }
                     }
                 },
                 onStopTracking = { homeViewModel.stopTracking(context) }
@@ -102,13 +106,18 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             SleepTipsCard()
         }
 
-        // Floating Action Button for quick start/stop
+        // Floating Action Button
         FloatingActionButton(
             onClick = {
                 if (isTracking) {
                     homeViewModel.stopTracking(context)
                 } else {
-                    showQuickAlarmPicker = true
+                    // Use regular bedtime/alarm if set
+                    if (sleepTime != null || alarmTime != null) {
+                        homeViewModel.startTracking(context)
+                    } else {
+                        showQuickAlarmPicker = true
+                    }
                 }
             },
             modifier = Modifier
@@ -126,7 +135,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         }
     }
 
-    // Time Pickers
+    // Regular Time Picker
     if (showAlarmTimePicker) {
         TimePickerDialog(
             initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
@@ -141,11 +150,13 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                     }
                 }
                 homeViewModel.setAlarm(calendar.timeInMillis)
+                showAlarmTimePicker = false
             },
             onDismiss = { showAlarmTimePicker = false }
         )
     }
 
+    // Quick Test Picker
     if (showQuickAlarmPicker) {
         QuickTimePickerDialog(
             onTimeSelected = { timestamp ->
@@ -154,7 +165,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                         context.startActivity(intent)
                     }
                 } else {
-                    homeViewModel.startTrackingWithAlarm(context, timestamp)
+                    homeViewModel.startQuickTest(context, ((timestamp - System.currentTimeMillis()) / 60000).toInt())
                 }
                 showQuickAlarmPicker = false
             },
@@ -162,6 +173,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
         )
     }
 
+    // Sleep Time Picker
     if (showSleepTimePicker) {
         TimePickerDialog(
             initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
@@ -172,6 +184,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                     set(Calendar.MINUTE, minute)
                 }
                 homeViewModel.setSleepTime(calendar)
+                showSleepTimePicker = false
             },
             onDismiss = { showSleepTimePicker = false }
         )
