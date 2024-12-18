@@ -33,7 +33,7 @@ import kotlin.math.sqrt
 class SleepTrackingService : Service(), SensorEventListener {
 
     private val job = Job()
-    private val coroutineScope = CoroutineScope(Dispatchers.IO + job) // Use IO dispatcher
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
@@ -43,21 +43,29 @@ class SleepTrackingService : Service(), SensorEventListener {
     private var gravity = FloatArray(3) { 0f }
     private var linearAcceleration = FloatArray(3) { 0f }
 
+    private var sleepStartTime: Long = 0
+    private var alarmTime: Long = 0
+
     companion object {
+        private const val TAG = "SleepTrackingService"
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
         private const val ACCELEROMETER_UPDATE_INTERVAL = 1000L // 1 second
         private const val AUDIO_UPDATE_INTERVAL = 1000L // 1 second
 
+        // Intent extra keys
+        const val EXTRA_SLEEP_START = "sleepStart"
+        const val EXTRA_ALARM_TIME = "alarmTime"
+
         /**
          * Starts the SleepTrackingService.
          */
-        fun startService(context: Context) {
-            val startIntent = Intent(context, SleepTrackingService::class.java)
+        fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(startIntent)
+                context.startForegroundService(intent)
             } else {
-                context.startService(startIntent)
+                context.startService(intent)
             }
+            Log.d(TAG, "Service start requested with intent: $intent")
         }
 
         /**
@@ -66,71 +74,149 @@ class SleepTrackingService : Service(), SensorEventListener {
         fun stopService(context: Context) {
             val stopIntent = Intent(context, SleepTrackingService::class.java)
             context.stopService(stopIntent)
+            Log.d(TAG, "Service stop requested")
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(1, getNotification())
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        audioRecorder = AudioRecorder(context = applicationContext)
+        Log.d(TAG, "Service onCreate")
+        initializeService()
+    }
 
-        startTracking()
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "Service onStartCommand")
+
+        if (intent == null) {
+            Log.e(TAG, "Received null intent, stopping service")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        try {
+            sleepStartTime = intent.getLongExtra(EXTRA_SLEEP_START, System.currentTimeMillis())
+            alarmTime = intent.getLongExtra(EXTRA_ALARM_TIME, 0L)
+
+            Log.d(TAG, "Received sleep start time: $sleepStartTime, alarm time: $alarmTime")
+
+            if (alarmTime > 0 && alarmTime <= sleepStartTime) {
+                Log.e(TAG, "Invalid alarm time (before sleep start), stopping service")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+
+            startTracking()
+            return START_STICKY
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onStartCommand", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+    }
+
+    private fun initializeService() {
+        try {
+            createNotificationChannel()
+            startForeground(1, createNotification())
+
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            audioRecorder = AudioRecorder(applicationContext)
+
+            Log.d(TAG, "Service initialized successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing service", e)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        Log.d(TAG, "Service onDestroy")
         stopTracking()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startTracking() {
-        // Start accelerometer tracking
-        accelerometer?.let {
-            sensorManager.registerListener(
-                this,
-                it,
-                SensorManager.SENSOR_DELAY_NORMAL,
-                ACCELEROMETER_UPDATE_INTERVAL.toInt() * 1000 // Convert to microseconds
-            )
+        try {
+            // Start accelerometer tracking
+            accelerometer?.let {
+                sensorManager.registerListener(
+                    this,
+                    it,
+                    SensorManager.SENSOR_DELAY_NORMAL,
+                    ACCELEROMETER_UPDATE_INTERVAL.toInt() * 1000
+                )
+                Log.d(TAG, "Accelerometer tracking started")
+            } ?: Log.e(TAG, "No accelerometer available")
+
+            // Start audio recording
+            audioRecorder.startRecording()
+            Log.d(TAG, "Audio recording started")
+
+            // Start collecting data
+            coroutineScope.launch { collectSleepData() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting tracking", e)
+            stopSelf()
         }
-        // Start audio recording
-        audioRecorder.startRecording()
-        // Start collecting data
-        coroutineScope.launch { collectSleepData() }
     }
 
     private fun stopTracking() {
-        // Stop accelerometer tracking
-        sensorManager.unregisterListener(this)
-        // Stop audio recording
-        audioRecorder.stopRecording()
-        // Cancel the coroutine
-        job.cancel()
+        try {
+            // Stop accelerometer tracking
+            sensorManager.unregisterListener(this)
+
+            // Stop audio recording
+            audioRecorder.stopRecording()
+
+            // Cancel the coroutine
+            job.cancel()
+
+            Log.d(TAG, "Tracking stopped successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping tracking", e)
+        }
     }
 
     private suspend fun collectSleepData() {
-        while (true) { // Use a loop for continuous data collection
-            val currentTime = System.currentTimeMillis()
-            val audioLevel = audioRecorder.getMaxAmplitude().toFloat()
-            val motionLevel = calculateMotionLevel()
+        try {
+            while (true) {
+                val currentTime = System.currentTimeMillis()
 
-            val sleepData = SleepData(
-                timestamp = currentTime,
-                motion = motionLevel,
-                audioLevel = audioLevel
-            )
-            // Insert into the database directly
-            withContext(Dispatchers.IO) {
-                sleepDao.insert(sleepData)
+                // Check if we've reached the alarm time
+                if (alarmTime > 0 && currentTime >= alarmTime) {
+                    Log.d(TAG, "Reached alarm time, stopping service")
+                    withContext(Dispatchers.Main) {
+                        stopSelf()
+                    }
+                    break
+                }
+
+                val audioLevel = audioRecorder.getMaxAmplitude().toFloat()
+                val motionLevel = calculateMotionLevel()
+
+                val sleepData = SleepData(
+                    timestamp = currentTime,
+                    motion = motionLevel,
+                    audioLevel = audioLevel,
+                    sleepStart = sleepStartTime,
+                    alarmTime = alarmTime
+                )
+
+                withContext(Dispatchers.IO) {
+                    sleepDao.insert(sleepData)
+                }
+
+                Log.d(TAG, "Data collected - Time: $currentTime, Motion: $motionLevel, Audio: $audioLevel")
+                delay(AUDIO_UPDATE_INTERVAL)
             }
-
-            Log.d("SleepTrackingService", "Timestamp: $currentTime, Motion: $motionLevel, Audio: $audioLevel")
-
-            delay(AUDIO_UPDATE_INTERVAL) // Sample at specified interval
+        } catch (e: Exception) {
+            Log.e(TAG, "Error collecting sleep data", e)
+            withContext(Dispatchers.Main) {
+                stopSelf()
+            }
         }
     }
 
@@ -142,12 +228,23 @@ class SleepTrackingService : Service(), SensorEventListener {
         )
     }
 
-    private fun getNotification(): Notification {
+    private fun createNotification(): Notification {
+        val formattedStartTime = android.text.format.DateFormat.getTimeFormat(this)
+            .format(sleepStartTime)
+
+        val formattedAlarmTime = if (alarmTime > 0) {
+            android.text.format.DateFormat.getTimeFormat(this).format(alarmTime)
+        } else {
+            "Not Set"
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SleepSafe is tracking your sleep")
+            .setContentTitle("Sleep Tracking Active")
+            .setContentText("Start: $formattedStartTime | Alarm: $formattedAlarmTime")
             .setSmallIcon(R.drawable.ic_sleep)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(Notification.CATEGORY_SERVICE)
+            .setOngoing(true)
             .build()
     }
 
@@ -157,15 +254,20 @@ class SleepTrackingService : Service(), SensorEventListener {
                 CHANNEL_ID,
                 "Sleep Tracking Service Channel",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Tracks sleep patterns using device sensors"
+                setShowBadge(false)
+            }
+
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+        if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
 
+        // Low-pass filter to separate gravity from linear acceleration
         val alpha = 0.8f
         gravity[0] = alpha * gravity[0] + (1 - alpha) * event.values[0]
         gravity[1] = alpha * gravity[1] + (1 - alpha) * event.values[1]

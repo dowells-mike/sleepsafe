@@ -1,7 +1,11 @@
 // AnalysisScreen.kt
 package com.example.sleepsafe.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -10,9 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sleepsafe.data.SleepData
+import com.example.sleepsafe.data.SleepQualityMetrics
+import com.example.sleepsafe.data.SleepSessionSummary
 import com.example.sleepsafe.viewmodel.AnalysisViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -20,161 +27,266 @@ import java.util.*
 /**
  * Composable function to display the Analysis screen.
  * It provides sleep insights, graphs, and additional sleep-related data.
- *
- * @param analysisViewModel The ViewModel for managing sleep data and selected date.
  */
+
 @Composable
 fun AnalysisScreen(analysisViewModel: AnalysisViewModel = viewModel()) {
-    val sleepData by analysisViewModel.sleepData.observeAsState(emptyList()) // Default to empty list
+    val sleepData by analysisViewModel.sleepData.observeAsState(emptyList())
     val selectedDate by analysisViewModel.selectedDate.observeAsState(Date())
+    val sleepQuality by analysisViewModel.sleepQuality.observeAsState()
+    val sessionSummary by analysisViewModel.sessionSummary.observeAsState()
+    val availableSessions by analysisViewModel.availableSessions.observeAsState(emptyList())
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
-        DateSelector(selectedDate) { date ->
-            analysisViewModel.updateSelectedDate(date)
-        }
+        // Date and Session Selection
+        DateSelector(
+            selectedDate = selectedDate,
+            availableSessions = availableSessions,
+            onDateSelected = { analysisViewModel.updateSelectedDate(it) },
+            onSessionSelected = { analysisViewModel.loadSleepSession(it) }
+        )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Display a message when no sleep data is available for that day
         if (sleepData.isEmpty()) {
-            Text("No sleep data available for the selected date.")
+            NoDataView()
         } else {
-            SleepQualityView(sleepData)
-            Spacer(modifier = Modifier.height(16.dp))
-            SleepGraphView(sleepData)
-            Spacer(modifier = Modifier.height(16.dp))
-            SnoreAnalysisView(sleepData)
-            Spacer(modifier = Modifier.height(16.dp))
-            SleepAdditionalDataView(sleepData)
+            // Sleep Quality Section
+            sleepQuality?.let { metrics ->
+                SleepQualityView(metrics, sessionSummary)
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Sleep Patterns Section
+            if (sleepData.isNotEmpty()) {
+                SleepPatternsView(sleepData)
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Detailed Analysis
+            sleepQuality?.let { metrics ->
+                DetailedAnalysisView(metrics, analysisViewModel.getSleepQualityTrend())
+            }
         }
     }
 }
 
-/**
- * Displays a date selector with navigation for previous and next days.
- *
- * @param selectedDate The currently selected date.
- * @param onDateSelected Callback to update the selected date.
- */
+
 @Composable
-fun DateSelector(selectedDate: Date, onDateSelected: (Date) -> Unit) {
+fun DateSelector(
+    selectedDate: Date,
+    availableSessions: List<Long>,
+    onDateSelected: (Date) -> Unit,
+    onSessionSelected: (Long) -> Unit
+) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = {
-            val calendar = Calendar.getInstance().apply { time = selectedDate }
-            calendar.add(Calendar.DAY_OF_YEAR, -1)
-            onDateSelected(calendar.time)
-        }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Day")
-        }
-        Text(text = dateFormat.format(selectedDate))
-        IconButton(onClick = {
-            val calendar = Calendar.getInstance().apply { time = selectedDate }
-            calendar.add(Calendar.DAY_OF_YEAR, 1)
-            onDateSelected(calendar.time)
-        }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Day")
-        }
-    }
-}
-
-/**
- * Displays sleep quality information with a circular progress bar and time stats.
- *
- * @param sleepData The list of SleepData objects.
- */
-@Composable
-fun SleepQualityView(sleepData: List<SleepData>) {
-    val sleepQuality = calculateSleepQuality(sleepData)
-    val motionLevels = sleepData.map { it.motion }
-    val audioLevels = sleepData.map { it.audioLevel }
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(
-            progress = { sleepQuality / 100f },
-            modifier = Modifier.size(100.dp),
-            strokeWidth = 8.dp,
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text("Time in Bed: ${formatDuration(sleepData)}")
-            Text("Time Asleep: ${formatDuration(sleepData)}")
-            Text("Average Motion: ${motionLevels.average()}")
-            Text("Average Noise: ${audioLevels.average()}")
-        }
-    }
-}
-
-/**
- * Placeholder for a sleep graph view.
- *
- * @param sleepData The list of SleepData objects.
- */
-@Composable
-fun SleepGraphView(sleepData: List<SleepData>) {
-    Text("Sleep Graph (Implementation Pending)")
-}
-
-/**
- * Placeholder for snore analysis view.
- *
- * @param sleepData The list of SleepData objects.
- */
-@Composable
-fun SnoreAnalysisView(sleepData: List<SleepData>) {
-    Text("Snore Analysis (Implementation Pending)")
-}
-
-/**
- * Displays additional sleep-related data such as snore time, bed time, and wake-up time.
- *
- * @param sleepData The list of SleepData objects.
- */
-@Composable
-fun SleepAdditionalDataView(sleepData: List<SleepData>) {
-    val motionLevels = sleepData.map { it.motion }
-    val audioLevels = sleepData.map { it.audioLevel }
 
     Column {
-        Text("Motion Levels: $motionLevels")
-        Text("Audio Levels: $audioLevels")
+        // Date Navigation
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = {
+                val calendar = Calendar.getInstance().apply { time = selectedDate }
+                calendar.add(Calendar.DAY_OF_YEAR, -1)
+                onDateSelected(calendar.time)
+            }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous Day")
+            }
+            Text(
+                text = dateFormat.format(selectedDate),
+                style = MaterialTheme.typography.titleMedium
+            )
+            IconButton(onClick = {
+                val calendar = Calendar.getInstance().apply { time = selectedDate }
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                onDateSelected(calendar.time)
+            }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next Day")
+            }
+        }
+
+        // Session Selection
+        if (availableSessions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Available Sessions:",
+                style = MaterialTheme.typography.labelMedium
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                availableSessions.forEach { sessionStart ->
+                    val sessionDate = Date(sessionStart)
+                    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                    FilterChip(
+                        selected = sessionStart == selectedDate.time,
+                        onClick = { onSessionSelected(sessionStart) },
+                        label = { Text(timeFormat.format(sessionDate)) }
+                    )
+                }
+            }
+        }
     }
 }
 
-/**
- * Calculates sleep quality as a percentage (placeholder implementation).
- *
- * @param sleepData The list of SleepData objects.
- * @return The calculated sleep quality percentage.
- */
-fun calculateSleepQuality(sleepData: List<SleepData>): Int {
-    return 80 // Placeholder value
+@Composable
+fun NoDataView() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "No sleep data available for the selected date.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
-/**
- * Formats the duration of time between the first and last sleep data entries.
- *
- * @param sleepData The list of SleepData objects.
- * @return A formatted duration string (e.g., "7h 30m").
- */
-fun formatDuration(sleepData: List<SleepData>): String {
-    if (sleepData.isEmpty()) return "0h 0m" // Handle empty list case
+@Composable
+fun SleepQualityView(metrics: SleepQualityMetrics, summary: SleepSessionSummary?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Sleep Quality",
+                style = MaterialTheme.typography.titleLarge
+            )
 
-    val durationMillis = sleepData.last().timestamp - sleepData.first().timestamp
-    val hours = (durationMillis / (1000 * 60 * 60)).toInt()
-    val minutes = ((durationMillis / (1000 * 60)) % 60).toInt()
-    return "${hours}h ${minutes}m"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Quality Score
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "${metrics.calculateQualityScore()}",
+                        style = MaterialTheme.typography.displayMedium
+                    )
+                    Text(
+                        metrics.getQualitativeAssessment(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Summary Stats
+                Column {
+                    summary?.let {
+                        Text("Average Motion: ${it.avgMotion.format(2)}")
+                        Text("Average Noise: ${it.avgAudioLevel.format(2)}")
+                        Text("Duration: ${formatDuration(it.timestamp, it.alarmTime)}")
+                    }
+                }
+            }
+        }
+    }
 }
 
-/**
- * Calculates the total snore time in minutes (placeholder implementation).
- *
- * @param sleepData The list of SleepData objects.
- * @return The calculated snore time in minutes.
- */
-fun calculateSnoreTime(sleepData: List<SleepData>): Int {
-    return 10 // Placeholder value
+@Composable
+fun SleepPatternsView(sleepData: List<SleepData>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Sleep Patterns",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            // Motion Pattern
+            Text("Motion Pattern", fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                val maxMotion = sleepData.maxOfOrNull { it.motion } ?: 1f
+                sleepData.forEach { data ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight((data.motion / maxMotion).coerceIn(0f, 1f))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Audio Pattern
+            Text("Noise Pattern", fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                val maxAudio = sleepData.maxOfOrNull { it.audioLevel } ?: 1f
+                sleepData.forEach { data ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight((data.audioLevel / maxAudio).coerceIn(0f, 1f))
+                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailedAnalysisView(metrics: SleepQualityMetrics, trend: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Detailed Analysis",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Text(trend)
+        }
+    }
+}
+
+private fun Float.format(decimals: Int) = "%.${decimals}f".format(this)
+
+private fun formatDuration(startTime: Long, endTime: Long): String {
+    if (endTime <= startTime) return "Unknown"
+    val durationMillis = endTime - startTime
+    val hours = durationMillis / (1000 * 60 * 60)
+    val minutes = (durationMillis % (1000 * 60 * 60)) / (1000 * 60)
+    return String.format("%dh %dm", hours, minutes)
 }

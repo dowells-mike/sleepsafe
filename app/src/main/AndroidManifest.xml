@@ -2,16 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Standard permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
-        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- Alarm-specific permissions -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -23,11 +26,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Sleepsafe"
         tools:targetApi="31">
-        <receiver android:name=".screens.AlarmReceiver" />
-        <receiver android:name=".utils.SnoozeReceiver" />
-        <receiver android:name=".utils.StopReceiver" />
 
-
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -35,10 +35,33 @@
             android:theme="@style/Theme.Sleepsafe">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
 
+        <!-- Services -->
+        <service
+            android:name=".utils.SleepTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone|location"
+            tools:ignore="ForegroundServicePermission" />
+
+        <!-- Broadcast Receivers -->
+        <receiver
+            android:name=".utils.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".utils.SnoozeReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".utils.StopReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+    </application>
 </manifest>
