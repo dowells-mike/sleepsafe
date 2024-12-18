@@ -33,6 +33,10 @@ class SleepTrackingService : Service() {
     private var sleepStartTime: Long = 0
     private var alarmTime: Long = 0
     private var lastUpdateTime: Long = 0
+    private var currentPhase = SleepTracker.SleepPhase.AWAKE
+    private var phaseStartTime = System.currentTimeMillis()
+    private var consecutiveLowActivity = 0
+    private var consecutiveHighActivity = 0
 
     private var dataCollectionJob: Job? = null
     private var notificationJob: Job? = null
@@ -54,6 +58,8 @@ class SleepTrackingService : Service() {
 
         private const val DEFAULT_UPDATE_INTERVAL = 5_000L // 5 seconds
         private const val NOTIFICATION_UPDATE_INTERVAL = 5_000L // 5 seconds
+        private const val PHASE_THRESHOLD_TIME = 10 * 60 * 1000L // 10 minutes
+        private const val ACTIVITY_THRESHOLD = 5 // Number of consecutive readings
 
         fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -103,7 +109,6 @@ class SleepTrackingService : Service() {
 
             Log.d(TAG, "Received sleep start time: $sleepStartTime, alarm time: $alarmTime")
 
-            // For testing, allow any future alarm time
             if (alarmTime > 0 && alarmTime <= System.currentTimeMillis()) {
                 Log.e(TAG, "Invalid alarm time (in the past), stopping service")
                 stopSelf()
@@ -143,11 +148,11 @@ class SleepTrackingService : Service() {
             startForeground(NOTIFICATION_ID, createNotification())
 
             motionDetector = MotionDetector(applicationContext).apply {
-                setSensitivity(motionSensitivity / 10f) // Convert 1-10 to 0.1-1.0
+                setSensitivity(motionSensitivity / 10f)
             }
 
             audioRecorder = AudioRecorder(applicationContext).apply {
-                setSensitivity(audioSensitivity / 10f) // Convert 1-10 to 0.1-1.0
+                setSensitivity(audioSensitivity / 10f)
             }
 
             Log.d(TAG, "Service initialized successfully")
@@ -167,21 +172,18 @@ class SleepTrackingService : Service() {
 
     private fun startTracking() {
         try {
-            // Start motion detection
             if (motionDetector?.startDetecting() == true) {
                 Log.d(TAG, "Motion detection started")
             } else {
                 Log.e(TAG, "Failed to start motion detection")
             }
 
-            // Start audio recording
             if (audioRecorder?.startRecording() == true) {
                 Log.d(TAG, "Audio recording started")
             } else {
                 Log.e(TAG, "Failed to start audio recording")
             }
 
-            // Start collecting data with error handling
             dataCollectionJob = serviceScope.launch {
                 try {
                     collectSleepData()
@@ -192,7 +194,6 @@ class SleepTrackingService : Service() {
                 }
             }
 
-            // Start notification updates with error handling
             notificationJob = serviceScope.launch {
                 try {
                     updateNotificationPeriodically()
@@ -210,21 +211,17 @@ class SleepTrackingService : Service() {
 
     private fun stopTracking() {
         try {
-            // Cancel coroutines
             dataCollectionJob?.cancel()
             notificationJob?.cancel()
             serviceScope.cancel()
             Log.d(TAG, "Coroutines cancelled")
 
-            // Stop motion detection
             motionDetector?.stopDetecting()
             Log.d(TAG, "Motion detection stopped")
 
-            // Stop audio recording
             audioRecorder?.stopRecording()
             Log.d(TAG, "Audio recording stopped")
 
-            // Clean up resources
             motionDetector = null
             audioRecorder = null
 
@@ -239,12 +236,10 @@ class SleepTrackingService : Service() {
             try {
                 val currentTime = System.currentTimeMillis()
 
-                // Check if we've reached the alarm time
                 if (alarmTime > 0) {
                     if (useSmartAlarm) {
                         val windowStart = alarmTime - (smartAlarmWindow * 60 * 1000)
                         if (currentTime >= windowStart) {
-                            // TODO: Implement smart alarm logic
                             if (isLightSleep()) {
                                 Log.d(TAG, "Light sleep detected during smart alarm window, stopping service")
                                 withContext(Dispatchers.Main) {
@@ -264,17 +259,19 @@ class SleepTrackingService : Service() {
                     }
                 }
 
-                // Only update if enough time has passed
                 if (currentTime - lastUpdateTime >= (updateInterval * 1000)) {
                     val motionLevel = motionDetector?.getMotionLevel() ?: 0f
                     val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
+
+                    updateSleepPhase(motionLevel, audioLevel)
 
                     val sleepData = SleepData(
                         timestamp = currentTime,
                         motion = motionLevel,
                         audioLevel = audioLevel,
                         sleepStart = sleepStartTime,
-                        alarmTime = alarmTime
+                        alarmTime = alarmTime,
+                        sleepPhase = currentPhase.name
                     )
 
                     withContext(Dispatchers.IO) {
@@ -282,26 +279,48 @@ class SleepTrackingService : Service() {
                     }
 
                     lastUpdateTime = currentTime
-                    Log.d(TAG, "Sleep data collected - Motion: $motionLevel, Audio: $audioLevel")
+                    Log.d(TAG, "Sleep data collected - Motion: $motionLevel, Audio: $audioLevel, Phase: $currentPhase")
                 }
 
-                delay(1000) // Check every second
+                delay(1000)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error collecting sleep data", e)
-                delay(5000) // Wait before retrying
+                delay(5000)
             }
         }
     }
 
-    private fun isLightSleep(): Boolean {
-        // Simple light sleep detection based on recent motion and sound
-        val motionLevel = motionDetector?.getMotionLevel() ?: 0f
-        val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
+    private fun updateSleepPhase(motionLevel: Float, audioLevel: Float) {
+        val isActive = motionLevel > 0.3f || audioLevel > 0.3f
+        val currentTime = System.currentTimeMillis()
 
-        // Consider it light sleep if there's some movement or sound
-        return motionLevel > 0.2f || audioLevel > 0.2f
+        if (isActive) {
+            consecutiveHighActivity++
+            consecutiveLowActivity = 0
+        } else {
+            consecutiveLowActivity++
+            consecutiveHighActivity = 0
+        }
+
+        val newPhase = when {
+            consecutiveHighActivity >= ACTIVITY_THRESHOLD -> SleepTracker.SleepPhase.AWAKE
+            consecutiveLowActivity >= ACTIVITY_THRESHOLD * 3 -> SleepTracker.SleepPhase.DEEP_SLEEP
+            consecutiveLowActivity >= ACTIVITY_THRESHOLD * 2 -> SleepTracker.SleepPhase.REM
+            consecutiveLowActivity >= ACTIVITY_THRESHOLD -> SleepTracker.SleepPhase.LIGHT_SLEEP
+            else -> currentPhase
+        }
+
+        if (newPhase != currentPhase && (currentTime - phaseStartTime >= PHASE_THRESHOLD_TIME || currentPhase == SleepTracker.SleepPhase.AWAKE)) {
+            currentPhase = newPhase
+            phaseStartTime = currentTime
+            Log.d(TAG, "Sleep phase changed to: $currentPhase")
+        }
+    }
+
+    private fun isLightSleep(): Boolean {
+        return currentPhase == SleepTracker.SleepPhase.LIGHT_SLEEP || currentPhase == SleepTracker.SleepPhase.REM
     }
 
     private suspend fun updateNotificationPeriodically() {
@@ -315,7 +334,7 @@ class SleepTrackingService : Service() {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error updating notification", e)
-                delay(5000) // Wait before retrying
+                delay(5000)
             }
         }
     }
@@ -329,6 +348,7 @@ class SleepTrackingService : Service() {
 
         val contentText = buildString {
             append("Duration: ${hours}h ${minutes}m ${seconds}s")
+            append("\nPhase: ${currentPhase.name.replace("_", " ")}")
             if (alarmTime > 0) {
                 append("\nAlarm: ${timeFormat.format(Date(alarmTime))}")
                 if (useSmartAlarm) {

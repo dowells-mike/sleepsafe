@@ -1,4 +1,3 @@
-// SleepDao.kt
 package com.example.sleepsafe.data
 
 import androidx.room.Dao
@@ -35,6 +34,16 @@ interface SleepDao {
 
     @Query("SELECT MAX(sleepStart) FROM sleep_data")
     suspend fun getLatestSleepSessionStart(): Long?
+
+    /**
+     * Latest data query for current sleep phase
+     */
+    @Query("""
+        SELECT * FROM sleep_data 
+        WHERE timestamp = (SELECT MAX(timestamp) FROM sleep_data)
+        LIMIT 1
+    """)
+    suspend fun getLatestSleepData(): SleepData?
 
     /**
      * Time-based queries

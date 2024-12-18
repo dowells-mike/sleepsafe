@@ -1,4 +1,3 @@
-// HomeViewModel.kt
 package com.example.sleepsafe.viewmodel
 
 import android.annotation.SuppressLint
@@ -22,9 +21,7 @@ import com.example.sleepsafe.data.SleepQualityMetrics
 import com.example.sleepsafe.utils.SleepTracker
 import com.example.sleepsafe.utils.SleepTrackingService
 import com.example.sleepsafe.utils.AlarmReceiver
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -45,7 +42,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _permissionRequired = MutableLiveData(false)
     val permissionRequired: LiveData<Boolean> = _permissionRequired
 
-    private val _currentSleepPhase = MutableLiveData<SleepTracker.SleepPhase>()
+    private val _currentSleepPhase = MutableLiveData<SleepTracker.SleepPhase>(SleepTracker.SleepPhase.AWAKE)
     val currentSleepPhase: LiveData<SleepTracker.SleepPhase> = _currentSleepPhase
 
     private val _currentSleepDuration = MutableLiveData<Long>()
@@ -55,6 +52,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val lastSleepQuality: LiveData<SleepQualityMetrics> = _lastSleepQuality
 
     private var durationUpdateJob: Job? = null
+    private var phaseUpdateJob: Job? = null
 
     init {
         loadLastSleepSession()
@@ -112,12 +110,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // For regular bedtime/alarm tracking
     fun startTracking(context: Context) {
         try {
-            // Use set bedtime and alarm if available, otherwise use current time
             val startTime = _sleepTime.value?.timeInMillis ?: System.currentTimeMillis()
-            val endTime = _alarmTime.value ?: (startTime + (8 * 60 * 60 * 1000)) // Default 8 hours
+            val endTime = _alarmTime.value ?: (startTime + (8 * 60 * 60 * 1000))
 
             startTrackingInternal(context, startTime, endTime)
         } catch (e: Exception) {
@@ -127,19 +123,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // For quick test timers
     fun startQuickTest(context: Context, durationMinutes: Int) {
         try {
             val startTime = System.currentTimeMillis()
             val endTime = startTime + (durationMinutes * 60 * 1000)
 
-            // Don't override existing bedtime/alarm settings
             val currentSleepTime = _sleepTime.value
             val currentAlarmTime = _alarmTime.value
 
             startTrackingInternal(context, startTime, endTime)
 
-            // Restore previous settings after starting tracking
             _sleepTime.value = currentSleepTime
             _alarmTime.value = currentAlarmTime
         } catch (e: Exception) {
@@ -159,11 +152,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         SleepTrackingService.startService(context, intent)
         _isTracking.postValue(true)
         startDurationUpdates(startTime)
+        startPhaseUpdates()
 
-        // Set the alarm
         setAlarm(endTime)
 
-        // Store initial data point
         viewModelScope.launch {
             try {
                 val initialData = SleepData(
@@ -189,6 +181,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             SleepTrackingService.stopService(context)
             _isTracking.postValue(false)
             durationUpdateJob?.cancel()
+            phaseUpdateJob?.cancel()
             loadLastSleepSession()
             Log.d(TAG, "Sleep tracking stopped")
             showToast("Sleep tracking stopped")
@@ -204,7 +197,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 val duration = System.currentTimeMillis() - startTime
                 _currentSleepDuration.postValue(duration)
-                delay(1000) // Update every second
+                delay(1000)
+            }
+        }
+    }
+
+    private fun startPhaseUpdates() {
+        phaseUpdateJob?.cancel()
+        phaseUpdateJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    val latestData = sleepDao.getLatestSleepData()
+                    latestData?.let { data ->
+                        val phase = SleepTracker.SleepPhase.valueOf(data.sleepPhase)
+                        _currentSleepPhase.postValue(phase)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error updating sleep phase", e)
+                }
+                delay(5000) // Update every 5 seconds
             }
         }
     }
@@ -241,5 +252,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         durationUpdateJob?.cancel()
+        phaseUpdateJob?.cancel()
     }
 }
