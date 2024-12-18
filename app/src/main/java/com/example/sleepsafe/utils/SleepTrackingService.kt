@@ -1,12 +1,13 @@
-// SleepTrackingService.kt
 package com.example.sleepsafe.utils
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -15,16 +16,17 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.example.sleepsafe.R
 import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.data.SleepDatabase
 import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.coroutineContext
 
 class SleepTrackingService : Service(), SensorEventListener {
-    private val job = Job()
-    private val serviceScope = CoroutineScope(Dispatchers.IO + job)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
@@ -37,6 +39,9 @@ class SleepTrackingService : Service(), SensorEventListener {
     private var lastUpdateTime: Long = 0
     private var currentPhase: SleepTracker.SleepPhase = SleepTracker.SleepPhase.AWAKE
 
+    private var dataCollectionJob: Job? = null
+    private var notificationJob: Job? = null
+
     companion object {
         private const val TAG = "SleepTrackingService"
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
@@ -45,8 +50,8 @@ class SleepTrackingService : Service(), SensorEventListener {
         const val EXTRA_SLEEP_START = "sleepStart"
         const val EXTRA_ALARM_TIME = "alarmTime"
 
-        private const val DATA_UPDATE_INTERVAL = 30_000L // 30 seconds
-        private const val NOTIFICATION_UPDATE_INTERVAL = 60_000L // 1 minute
+        private const val DATA_UPDATE_INTERVAL = 5_000L // 5 seconds for testing
+        private const val NOTIFICATION_UPDATE_INTERVAL = 5_000L // 5 seconds for testing
 
         fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -84,8 +89,15 @@ class SleepTrackingService : Service(), SensorEventListener {
 
             Log.d(TAG, "Received sleep start time: $sleepStartTime, alarm time: $alarmTime")
 
-            if (alarmTime > 0 && alarmTime <= sleepStartTime) {
-                Log.e(TAG, "Invalid alarm time (before sleep start), stopping service")
+            // For testing, allow any future alarm time
+            if (alarmTime > 0 && alarmTime <= System.currentTimeMillis()) {
+                Log.e(TAG, "Invalid alarm time (in the past), stopping service")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+
+            if (!checkPermissions()) {
+                Log.e(TAG, "Missing required permissions")
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -97,6 +109,18 @@ class SleepTrackingService : Service(), SensorEventListener {
             stopSelf()
             return START_NOT_STICKY
         }
+    }
+
+    private fun checkPermissions(): Boolean {
+        val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+        val foregroundServicePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+
+        return audioPermission == PackageManager.PERMISSION_GRANTED &&
+                foregroundServicePermission == PackageManager.PERMISSION_GRANTED
     }
 
     private fun initializeService() {
@@ -147,14 +171,33 @@ class SleepTrackingService : Service(), SensorEventListener {
             }
 
             // Start audio recording
-            audioRecorder?.startRecording()
-            Log.d(TAG, "Audio recording started")
+            if (audioRecorder?.startRecording() == true) {
+                Log.d(TAG, "Audio recording started")
+            } else {
+                Log.e(TAG, "Failed to start audio recording")
+            }
 
-            // Start collecting data
-            serviceScope.launch { collectSleepData() }
+            // Start collecting data with error handling
+            dataCollectionJob = serviceScope.launch {
+                try {
+                    collectSleepData()
+                } catch (e: Exception) {
+                    if (e !is CancellationException) {
+                        Log.e(TAG, "Error in data collection", e)
+                    }
+                }
+            }
 
-            // Start notification updates
-            serviceScope.launch { updateNotificationPeriodically() }
+            // Start notification updates with error handling
+            notificationJob = serviceScope.launch {
+                try {
+                    updateNotificationPeriodically()
+                } catch (e: Exception) {
+                    if (e !is CancellationException) {
+                        Log.e(TAG, "Error in notification updates", e)
+                    }
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tracking", e)
             stopSelf()
@@ -163,6 +206,12 @@ class SleepTrackingService : Service(), SensorEventListener {
 
     private fun stopTracking() {
         try {
+            // Cancel coroutines
+            dataCollectionJob?.cancel()
+            notificationJob?.cancel()
+            serviceScope.cancel()
+            Log.d(TAG, "Coroutines cancelled")
+
             // Stop accelerometer tracking
             sensorManager?.unregisterListener(this)
             Log.d(TAG, "Accelerometer tracking stopped")
@@ -170,10 +219,6 @@ class SleepTrackingService : Service(), SensorEventListener {
             // Stop audio recording
             audioRecorder?.stopRecording()
             Log.d(TAG, "Audio recording stopped")
-
-            // Cancel all coroutines
-            job.cancel()
-            Log.d(TAG, "Coroutines cancelled")
 
             // Clean up resources
             audioRecorder = null
@@ -186,8 +231,8 @@ class SleepTrackingService : Service(), SensorEventListener {
     }
 
     private suspend fun collectSleepData() {
-        try {
-            while (true) {
+        while (coroutineContext.isActive) {
+            try {
                 val currentTime = System.currentTimeMillis()
 
                 // Check if we've reached the alarm time
@@ -203,7 +248,7 @@ class SleepTrackingService : Service(), SensorEventListener {
                 if (currentTime - lastUpdateTime >= DATA_UPDATE_INTERVAL) {
                     sleepTracker?.let { tracker ->
                         val motionData = tracker.getLastMotionData()
-                        val audioLevel = audioRecorder?.getMaxAmplitude()?.toFloat() ?: 0f
+                        val audioLevel = audioRecorder?.getMaxAmplitude() ?: 0f
                         val audioData = tracker.processAudio(audioLevel)
 
                         currentPhase = tracker.updateSleepPhase(motionData, audioData)
@@ -211,7 +256,7 @@ class SleepTrackingService : Service(), SensorEventListener {
                         val sleepData = SleepData(
                             timestamp = currentTime,
                             motion = motionData.magnitude,
-                            audioLevel = audioData.amplitude,
+                            audioLevel = audioLevel,
                             sleepStart = sleepStartTime,
                             alarmTime = alarmTime,
                             sleepPhase = currentPhase.name
@@ -222,30 +267,33 @@ class SleepTrackingService : Service(), SensorEventListener {
                         }
 
                         lastUpdateTime = currentTime
-                        Log.d(TAG, "Sleep data collected: $sleepData")
+                        Log.d(TAG, "Sleep data collected - Motion: ${motionData.magnitude}, Audio: $audioLevel")
                     }
                 }
 
                 delay(1000) // Check every second
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error collecting sleep data", e)
-            withContext(Dispatchers.Main) {
-                stopSelf()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error collecting sleep data", e)
+                delay(5000) // Wait before retrying
             }
         }
     }
 
     private suspend fun updateNotificationPeriodically() {
-        try {
-            while (true) {
+        while (coroutineContext.isActive) {
+            try {
                 val notification = createNotification()
                 val notificationManager = getSystemService(NotificationManager::class.java)
                 notificationManager.notify(NOTIFICATION_ID, notification)
                 delay(NOTIFICATION_UPDATE_INTERVAL)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating notification", e)
+                delay(5000) // Wait before retrying
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating notification", e)
         }
     }
 
@@ -264,17 +312,20 @@ class SleepTrackingService : Service(), SensorEventListener {
     }
 
     private fun createNotification(): Notification {
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val sleepDuration = System.currentTimeMillis() - sleepStartTime
         val hours = sleepDuration / (1000 * 60 * 60)
         val minutes = (sleepDuration % (1000 * 60 * 60)) / (1000 * 60)
+        val seconds = (sleepDuration % (1000 * 60)) / 1000
 
         val contentText = buildString {
             append("Sleep Phase: $currentPhase")
-            append("\nDuration: ${hours}h ${minutes}m")
+            append("\nDuration: ${hours}h ${minutes}m ${seconds}s")
             if (alarmTime > 0) {
                 append("\nAlarm: ${timeFormat.format(Date(alarmTime))}")
             }
+            append("\nMotion: ${sleepTracker?.getLastMotionData()?.magnitude?.format(2) ?: "0.00"}")
+            append("\nNoise: ${audioRecorder?.getMaxAmplitude()?.format(2) ?: "0.00"}")
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -302,4 +353,6 @@ class SleepTrackingService : Service(), SensorEventListener {
             manager.createNotificationChannel(channel)
         }
     }
+
+    private fun Float.format(decimals: Int): String = "%.${decimals}f".format(this)
 }

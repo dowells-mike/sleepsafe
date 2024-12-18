@@ -1,22 +1,18 @@
 // HomeScreen.kt
 package com.example.sleepsafe.screens
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +44,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     val sleepDuration by homeViewModel.currentSleepDuration.observeAsState(0L)
 
     var showAlarmTimePicker by remember { mutableStateOf(false) }
+    var showQuickAlarmPicker by remember { mutableStateOf(false) }
     var showSleepTimePicker by remember { mutableStateOf(false) }
 
     Box(
@@ -82,12 +78,8 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             QuickActionsRow(
                 isTracking = isTracking,
                 onStartTracking = {
-                    if (permissionRequired) {
-                        homeViewModel.getExactAlarmPermissionIntent()?.let { intent ->
-                            context.startActivity(intent)
-                        }
-                    } else {
-                        homeViewModel.startTrackingNow(context)
+                    if (!isTracking) {
+                        showQuickAlarmPicker = true
                     }
                 },
                 onStopTracking = { homeViewModel.stopTracking(context) }
@@ -116,7 +108,7 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                 if (isTracking) {
                     homeViewModel.stopTracking(context)
                 } else {
-                    homeViewModel.startTrackingNow(context)
+                    showQuickAlarmPicker = true
                 }
             },
             modifier = Modifier
@@ -140,9 +132,33 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
             initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
             onTimeSelected = { hour, minute ->
-                homeViewModel.setAlarm(hour, minute, useSmartAlarm = true)
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    // If selected time is before current time, add one day
+                    if (timeInMillis <= System.currentTimeMillis()) {
+                        add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                }
+                homeViewModel.setAlarm(calendar.timeInMillis)
             },
             onDismiss = { showAlarmTimePicker = false }
+        )
+    }
+
+    if (showQuickAlarmPicker) {
+        QuickTimePickerDialog(
+            onTimeSelected = { timestamp ->
+                if (permissionRequired) {
+                    homeViewModel.getExactAlarmPermissionIntent()?.let { intent ->
+                        context.startActivity(intent)
+                    }
+                } else {
+                    homeViewModel.startTrackingWithAlarm(context, timestamp)
+                }
+                showQuickAlarmPicker = false
+            },
+            onDismiss = { showQuickAlarmPicker = false }
         )
     }
 
@@ -151,7 +167,11 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
             initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
             onTimeSelected = { hour, minute ->
-                homeViewModel.setSleepTime(hour, minute)
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                }
+                homeViewModel.setSleepTime(calendar)
             },
             onDismiss = { showSleepTimePicker = false }
         )
@@ -255,7 +275,7 @@ fun QuickActionsRow(
             onClick = onStopTracking
         )
         QuickActionButton(
-            icon = Icons.Outlined.ShowChart,
+            icon = Icons.AutoMirrored.Outlined.ShowChart,
             label = "Analysis",
             enabled = true,
             onClick = { /* Navigate to analysis */ }
@@ -450,6 +470,7 @@ private fun formatTime(date: Date): String {
     return SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
 }
 
+@SuppressLint("DefaultLocale")
 private fun formatDuration(millis: Long): String {
     val hours = millis / (1000 * 60 * 60)
     val minutes = (millis % (1000 * 60 * 60)) / (1000 * 60)

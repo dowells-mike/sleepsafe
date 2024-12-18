@@ -45,9 +45,8 @@ data class SleepData(
         return timestamp > 0 &&
                 motion >= 0f &&
                 audioLevel >= 0f &&
-                (sleepStart == 0L || sleepStart <= timestamp) &&
-                (alarmTime == 0L || alarmTime > sleepStart) &&
-                sleepPhase in setOf("AWAKE", "LIGHT_SLEEP", "DEEP_SLEEP", "REM")
+                sleepStart > 0 &&
+                sleepPhase in SLEEP_PHASES
     }
 
     /**
@@ -72,7 +71,40 @@ data class SleepData(
         }
     }
 
+    /**
+     * Formats the motion value for display.
+     */
+    fun getFormattedMotion(): String {
+        return "%.2f".format(motion)
+    }
+
+    /**
+     * Formats the audio level for display.
+     */
+    fun getFormattedAudioLevel(): String {
+        return "%.2f".format(audioLevel)
+    }
+
     companion object {
         val SLEEP_PHASES = setOf("AWAKE", "LIGHT_SLEEP", "DEEP_SLEEP", "REM")
+
+        /**
+         * Creates a test data point with current timestamp.
+         */
+        fun createTestData(
+            motion: Float = 0f,
+            audioLevel: Float = 0f,
+            sleepPhase: String = "AWAKE"
+        ): SleepData {
+            val now = System.currentTimeMillis()
+            return SleepData(
+                timestamp = now,
+                motion = motion,
+                audioLevel = audioLevel,
+                sleepStart = now,
+                alarmTime = now + (3 * 60 * 1000), // 3 minutes from now
+                sleepPhase = sleepPhase
+            )
+        }
     }
 }
