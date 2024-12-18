@@ -1,8 +1,10 @@
 // HomeScreen.kt
 package com.example.sleepsafe.screens
 
-import com.example.sleepsafe.screens.TimePickerDialog
-import android.widget.Toast
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,16 +14,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.sleepsafe.utils.SleepTrackingService
 import com.example.sleepsafe.viewmodel.HomeViewModel
-import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
 
 /**
  * Displays the Home screen with functionalities for managing sleep tracking, alarms, and sleep time.
  *
  * @param homeViewModel The ViewModel to handle the logic and state of the Home screen.
  */
+@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
@@ -38,13 +39,10 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
     var showSleepTimePicker by remember { mutableStateOf(false) }
 
     // Time formatting
-    val sleepTimeFormatted = sleepTime?.let {
-        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it.time)
-    } ?: "Not Set"
-
+    val sleepTimeFormatted = sleepTime?.let { homeViewModel.formatTime(it) } ?: "Not Set"
     val alarmTimeFormatted = alarmTime?.let {
         val calendar = Calendar.getInstance().apply { timeInMillis = it }
-        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
+        homeViewModel.formatTime(calendar)
     } ?: "Not Set"
 
     // Layout
@@ -65,39 +63,21 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
                     showAlarmTimePicker = true
                 }
             },
-            onCancelAlarmClick = {
-                homeViewModel.cancelAlarm()
-                Toast.makeText(context, "Alarm Canceled", Toast.LENGTH_SHORT).show()
-            }
+            onCancelAlarmClick = { homeViewModel.cancelAlarm() }
         )
 
         // Sleep Time Section
         SleepTimeSection(
             sleepTimeFormatted = sleepTimeFormatted,
             onSetSleepTimeClick = { showSleepTimePicker = true },
-            onClearSleepTimeClick = {
-                if (sleepTime != null) {
-                    homeViewModel.clearSleepTime()
-                    Toast.makeText(context, "Sleep Time Cleared", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "No Sleep Time Set", Toast.LENGTH_SHORT).show()
-                }
-            }
+            onClearSleepTimeClick = { homeViewModel.clearSleepTime() }
         )
 
         // Tracking Section
         TrackingSection(
             isTracking = isTracking,
-            onStartTrackingClick = {
-                homeViewModel.startTrackingNow(context)
-                SleepTrackingService.startService(context)
-                Toast.makeText(context, "Sleep Tracking Started", Toast.LENGTH_SHORT).show()
-            },
-            onStopTrackingClick = {
-                homeViewModel.stopTracking(context)
-                SleepTrackingService.stopService(context)
-                Toast.makeText(context, "Sleep Tracking Stopped", Toast.LENGTH_SHORT).show()
-            }
+            onStartTrackingClick = { homeViewModel.startTrackingNow(context) },
+            onStopTrackingClick = { homeViewModel.stopTracking(context) }
         )
     }
 
@@ -109,7 +89,9 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             text = { Text("This app needs permission to schedule exact alarms.") },
             confirmButton = {
                 TextButton(onClick = {
-                    homeViewModel.requestExactAlarmPermission()
+                    homeViewModel.getExactAlarmPermissionIntent()?.let { intent ->
+                        context.startActivity(intent)
+                    }
                     showPermissionDialog = false
                 }) { Text("Grant Permission") }
             },
@@ -126,11 +108,6 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             initialMinute = 30,
             onTimeSelected = { selectedHour, selectedMinute ->
                 homeViewModel.setAlarm(selectedHour, selectedMinute, useSmartAlarm = false)
-                Toast.makeText(
-                    context,
-                    "Alarm set for ${selectedHour}:${selectedMinute}",
-                    Toast.LENGTH_SHORT
-                ).show()
                 showAlarmTimePicker = false
             },
             onDismiss = { showAlarmTimePicker = false }
@@ -144,11 +121,6 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
             initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
             onTimeSelected = { selectedHour, selectedMinute ->
                 homeViewModel.setSleepTime(selectedHour, selectedMinute)
-                Toast.makeText(
-                    context,
-                    "Sleep Time set for ${selectedHour}:${selectedMinute}",
-                    Toast.LENGTH_SHORT
-                ).show()
                 showSleepTimePicker = false
             },
             onDismiss = { showSleepTimePicker = false }
@@ -158,10 +130,6 @@ fun HomeScreen(homeViewModel: HomeViewModel = viewModel()) {
 
 /**
  * Displays a section for managing the alarm.
- *
- * @param alarmTimeFormatted The formatted alarm time to display.
- * @param onSetAlarmClick Action to perform when "Set Alarm" is clicked.
- * @param onCancelAlarmClick Action to perform when "Cancel Alarm" is clicked.
  */
 @Composable
 fun AlarmSection(
@@ -180,10 +148,6 @@ fun AlarmSection(
 
 /**
  * Displays a section for setting and clearing sleep time.
- *
- * @param sleepTimeFormatted The formatted sleep time to display.
- * @param onSetSleepTimeClick Action to perform when "Set Sleep Time" is clicked.
- * @param onClearSleepTimeClick Action to perform when "Clear Sleep Time" is clicked.
  */
 @Composable
 fun SleepTimeSection(
@@ -202,10 +166,6 @@ fun SleepTimeSection(
 
 /**
  * Displays a section for managing sleep tracking.
- *
- * @param isTracking Whether sleep tracking is currently active.
- * @param onStartTrackingClick Action to perform when "Start Tracking Now" is clicked.
- * @param onStopTrackingClick Action to perform when "Stop Tracking" is clicked.
  */
 @Composable
 fun TrackingSection(
