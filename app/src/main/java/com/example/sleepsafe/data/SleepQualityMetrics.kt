@@ -1,34 +1,36 @@
-// SleepQualityMetrics.kt
 package com.example.sleepsafe.data
 
+import androidx.room.ColumnInfo
+
 /**
- * Data class representing sleep quality metrics for analysis.
- * This class is used to aggregate and analyze sleep tracking data.
+ * Data class representing sleep quality metrics.
  */
 data class SleepQualityMetrics(
-    val totalReadings: Int = 0,
-    val avgMotion: Float = 0f,
-    val maxMotion: Float = 0f,
-    val avgAudio: Float = 0f,
-    val maxAudio: Float = 0f
+    @ColumnInfo(name = "totalReadings") val totalReadings: Int,
+    @ColumnInfo(name = "avgMotion") val avgMotion: Float,
+    @ColumnInfo(name = "maxMotion") val maxMotion: Float,
+    @ColumnInfo(name = "avgAudio") val avgAudio: Float,
+    @ColumnInfo(name = "maxAudio") val maxAudio: Float
 ) {
     /**
-     * Calculates a sleep quality score based on the metrics.
+     * Calculates a quality score based on the metrics.
      * @return A score between 0 (poor) and 100 (excellent)
      */
     fun calculateQualityScore(): Int {
         if (totalReadings == 0) return 0
 
-        // Convert metrics to scores between 0-100
-        val motionScore = (100 - (avgMotion / maxMotion) * 100).coerceIn(0f, 100f)
-        val audioScore = (100 - (avgAudio / maxAudio) * 100).coerceIn(0f, 100f)
+        // Calculate motion score (lower is better)
+        val motionScore = ((1 - avgMotion / maxMotion) * 100).coerceIn(0f, 100f)
+
+        // Calculate audio score (lower is better)
+        val audioScore = ((1 - avgAudio / maxAudio) * 100).coerceIn(0f, 100f)
 
         // Weight the scores (motion is weighted more heavily than audio)
         return ((motionScore * 0.6f) + (audioScore * 0.4f)).toInt()
     }
 
     /**
-     * Provides a qualitative assessment of sleep quality.
+     * Gets a qualitative assessment of the metrics.
      */
     fun getQualitativeAssessment(): String {
         return when (calculateQualityScore()) {
@@ -41,14 +43,13 @@ data class SleepQualityMetrics(
     }
 
     /**
-     * Provides detailed analysis of the sleep metrics.
+     * Gets detailed analysis of the metrics.
      */
     fun getDetailedAnalysis(): String {
-        val quality = getQualitativeAssessment()
         val score = calculateQualityScore()
 
         return buildString {
-            appendLine("Sleep Quality: $quality ($score/100)")
+            appendLine("Sleep Quality: ${getQualitativeAssessment()} ($score/100)")
             appendLine("Based on $totalReadings measurements:")
             appendLine("- Movement: Average ${avgMotion.format(2)}, Peak ${maxMotion.format(2)}")
             appendLine("- Noise: Average ${avgAudio.format(2)}, Peak ${maxAudio.format(2)}")

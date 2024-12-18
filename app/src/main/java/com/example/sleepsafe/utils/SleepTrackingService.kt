@@ -18,62 +18,47 @@ import androidx.core.app.NotificationCompat
 import com.example.sleepsafe.R
 import com.example.sleepsafe.data.SleepData
 import com.example.sleepsafe.data.SleepDatabase
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.sqrt
+import kotlinx.coroutines.*
+import java.text.SimpleDateFormat
+import java.util.*
 
-/**
- * Service for tracking sleep using accelerometer and audio data.
- * Runs in the background as a foreground service.
- */
 class SleepTrackingService : Service(), SensorEventListener {
-
     private val job = Job()
-    private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
+    private val serviceScope = CoroutineScope(Dispatchers.IO + job)
 
-    private lateinit var sensorManager: SensorManager
+    private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
-    private lateinit var audioRecorder: AudioRecorder
+    private var audioRecorder: AudioRecorder? = null
     private val sleepDao by lazy { SleepDatabase.getDatabase(applicationContext).sleepDao() }
-
-    private var gravity = FloatArray(3) { 0f }
-    private var linearAcceleration = FloatArray(3) { 0f }
+    private var sleepTracker: SleepTracker? = null
 
     private var sleepStartTime: Long = 0
     private var alarmTime: Long = 0
+    private var lastUpdateTime: Long = 0
+    private var currentPhase: SleepTracker.SleepPhase = SleepTracker.SleepPhase.AWAKE
 
     companion object {
         private const val TAG = "SleepTrackingService"
         const val CHANNEL_ID = "SleepTrackingServiceChannel"
-        private const val ACCELEROMETER_UPDATE_INTERVAL = 1000L // 1 second
-        private const val AUDIO_UPDATE_INTERVAL = 1000L // 1 second
+        const val NOTIFICATION_ID = 1
 
-        // Intent extra keys
         const val EXTRA_SLEEP_START = "sleepStart"
         const val EXTRA_ALARM_TIME = "alarmTime"
 
-        /**
-         * Starts the SleepTrackingService.
-         */
+        private const val DATA_UPDATE_INTERVAL = 30_000L // 30 seconds
+        private const val NOTIFICATION_UPDATE_INTERVAL = 60_000L // 1 minute
+
         fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
-            Log.d(TAG, "Service start requested with intent: $intent")
+            Log.d(TAG, "Service start requested")
         }
 
-        /**
-         * Stops the SleepTrackingService.
-         */
         fun stopService(context: Context) {
-            val stopIntent = Intent(context, SleepTrackingService::class.java)
-            context.stopService(stopIntent)
+            context.stopService(Intent(context, SleepTrackingService::class.java))
             Log.d(TAG, "Service stop requested")
         }
     }
@@ -117,11 +102,22 @@ class SleepTrackingService : Service(), SensorEventListener {
     private fun initializeService() {
         try {
             createNotificationChannel()
-            startForeground(1, createNotification())
+            startForeground(NOTIFICATION_ID, createNotification())
 
-            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            if (sensorManager == null) {
+                Log.e(TAG, "Failed to get SensorManager")
+                stopSelf()
+                return
+            }
+
+            accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            if (accelerometer == null) {
+                Log.e(TAG, "No accelerometer available")
+            }
+
             audioRecorder = AudioRecorder(applicationContext)
+            sleepTracker = SleepTracker()
 
             Log.d(TAG, "Service initialized successfully")
         } catch (e: Exception) {
@@ -141,22 +137,24 @@ class SleepTrackingService : Service(), SensorEventListener {
     private fun startTracking() {
         try {
             // Start accelerometer tracking
-            accelerometer?.let {
-                sensorManager.registerListener(
+            accelerometer?.let { sensor ->
+                sensorManager?.registerListener(
                     this,
-                    it,
-                    SensorManager.SENSOR_DELAY_NORMAL,
-                    ACCELEROMETER_UPDATE_INTERVAL.toInt() * 1000
+                    sensor,
+                    SensorManager.SENSOR_DELAY_NORMAL
                 )
                 Log.d(TAG, "Accelerometer tracking started")
-            } ?: Log.e(TAG, "No accelerometer available")
+            }
 
             // Start audio recording
-            audioRecorder.startRecording()
+            audioRecorder?.startRecording()
             Log.d(TAG, "Audio recording started")
 
             // Start collecting data
-            coroutineScope.launch { collectSleepData() }
+            serviceScope.launch { collectSleepData() }
+
+            // Start notification updates
+            serviceScope.launch { updateNotificationPeriodically() }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tracking", e)
             stopSelf()
@@ -166,13 +164,20 @@ class SleepTrackingService : Service(), SensorEventListener {
     private fun stopTracking() {
         try {
             // Stop accelerometer tracking
-            sensorManager.unregisterListener(this)
+            sensorManager?.unregisterListener(this)
+            Log.d(TAG, "Accelerometer tracking stopped")
 
             // Stop audio recording
-            audioRecorder.stopRecording()
+            audioRecorder?.stopRecording()
+            Log.d(TAG, "Audio recording stopped")
 
-            // Cancel the coroutine
+            // Cancel all coroutines
             job.cancel()
+            Log.d(TAG, "Coroutines cancelled")
+
+            // Clean up resources
+            audioRecorder = null
+            sleepTracker = null
 
             Log.d(TAG, "Tracking stopped successfully")
         } catch (e: Exception) {
@@ -194,23 +199,34 @@ class SleepTrackingService : Service(), SensorEventListener {
                     break
                 }
 
-                val audioLevel = audioRecorder.getMaxAmplitude().toFloat()
-                val motionLevel = calculateMotionLevel()
+                // Only update if enough time has passed
+                if (currentTime - lastUpdateTime >= DATA_UPDATE_INTERVAL) {
+                    sleepTracker?.let { tracker ->
+                        val motionData = tracker.getLastMotionData()
+                        val audioLevel = audioRecorder?.getMaxAmplitude()?.toFloat() ?: 0f
+                        val audioData = tracker.processAudio(audioLevel)
 
-                val sleepData = SleepData(
-                    timestamp = currentTime,
-                    motion = motionLevel,
-                    audioLevel = audioLevel,
-                    sleepStart = sleepStartTime,
-                    alarmTime = alarmTime
-                )
+                        currentPhase = tracker.updateSleepPhase(motionData, audioData)
 
-                withContext(Dispatchers.IO) {
-                    sleepDao.insert(sleepData)
+                        val sleepData = SleepData(
+                            timestamp = currentTime,
+                            motion = motionData.magnitude,
+                            audioLevel = audioData.amplitude,
+                            sleepStart = sleepStartTime,
+                            alarmTime = alarmTime,
+                            sleepPhase = currentPhase.name
+                        )
+
+                        withContext(Dispatchers.IO) {
+                            sleepDao.insert(sleepData)
+                        }
+
+                        lastUpdateTime = currentTime
+                        Log.d(TAG, "Sleep data collected: $sleepData")
+                    }
                 }
 
-                Log.d(TAG, "Data collected - Time: $currentTime, Motion: $motionLevel, Audio: $audioLevel")
-                delay(AUDIO_UPDATE_INTERVAL)
+                delay(1000) // Check every second
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error collecting sleep data", e)
@@ -220,65 +236,70 @@ class SleepTrackingService : Service(), SensorEventListener {
         }
     }
 
-    private fun calculateMotionLevel(): Float {
-        return sqrt(
-            linearAcceleration[0] * linearAcceleration[0] +
-                    linearAcceleration[1] * linearAcceleration[1] +
-                    linearAcceleration[2] * linearAcceleration[2]
-        )
-    }
-
-    private fun createNotification(): Notification {
-        val formattedStartTime = android.text.format.DateFormat.getTimeFormat(this)
-            .format(sleepStartTime)
-
-        val formattedAlarmTime = if (alarmTime > 0) {
-            android.text.format.DateFormat.getTimeFormat(this).format(alarmTime)
-        } else {
-            "Not Set"
-        }
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Sleep Tracking Active")
-            .setContentText("Start: $formattedStartTime | Alarm: $formattedAlarmTime")
-            .setSmallIcon(R.drawable.ic_sleep)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setOngoing(true)
-            .build()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                CHANNEL_ID,
-                "Sleep Tracking Service Channel",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Tracks sleep patterns using device sensors"
-                setShowBadge(false)
+    private suspend fun updateNotificationPeriodically() {
+        try {
+            while (true) {
+                val notification = createNotification()
+                val notificationManager = getSystemService(NotificationManager::class.java)
+                notificationManager.notify(NOTIFICATION_ID, notification)
+                delay(NOTIFICATION_UPDATE_INTERVAL)
             }
-
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(serviceChannel)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating notification", e)
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
 
-        // Low-pass filter to separate gravity from linear acceleration
-        val alpha = 0.8f
-        gravity[0] = alpha * gravity[0] + (1 - alpha) * event.values[0]
-        gravity[1] = alpha * gravity[1] + (1 - alpha) * event.values[1]
-        gravity[2] = alpha * gravity[2] + (1 - alpha) * event.values[2]
-
-        linearAcceleration[0] = event.values[0] - gravity[0]
-        linearAcceleration[1] = event.values[1] - gravity[1]
-        linearAcceleration[2] = event.values[2] - gravity[2]
+        try {
+            sleepTracker?.processMotion(event)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing sensor data", e)
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // No action needed
+    }
+
+    private fun createNotification(): Notification {
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val sleepDuration = System.currentTimeMillis() - sleepStartTime
+        val hours = sleepDuration / (1000 * 60 * 60)
+        val minutes = (sleepDuration % (1000 * 60 * 60)) / (1000 * 60)
+
+        val contentText = buildString {
+            append("Sleep Phase: $currentPhase")
+            append("\nDuration: ${hours}h ${minutes}m")
+            if (alarmTime > 0) {
+                append("\nAlarm: ${timeFormat.format(Date(alarmTime))}")
+            }
+        }
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Sleep Tracking Active")
+            .setContentText(contentText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setSmallIcon(R.drawable.ic_sleep)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Sleep Tracking Service Channel",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows sleep tracking status"
+                setShowBadge(false)
+            }
+
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
     }
 }

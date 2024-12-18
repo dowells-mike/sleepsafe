@@ -58,6 +58,7 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion")
 
     implementation("androidx.compose.foundation:foundation:1.5.2")
+    implementation (libs.androidx.material.icons.extended)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

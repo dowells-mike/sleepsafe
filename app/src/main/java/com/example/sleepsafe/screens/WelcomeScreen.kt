@@ -1,12 +1,10 @@
-// WelcomeScreen.kt
-import androidx.activity.ComponentActivity
+package com.example.sleepsafe.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -17,10 +15,16 @@ import com.example.sleepsafe.utils.PermissionsHelper
  * Displays the Welcome screen with an introduction to the app's features and a "Get Started" button.
  *
  * @param navController The NavController for navigating between screens.
- * @param activity The ComponentActivity for managing permissions and lifecycle.
+ * @param permissionsHelper The PermissionsHelper instance to handle permissions.
  */
 @Composable
-fun WelcomeScreen(navController: NavController, activity: ComponentActivity) {
+fun WelcomeScreen(
+    navController: NavController,
+    permissionsHelper: PermissionsHelper
+) {
+    var showRuntimePermissionDialog by remember { mutableStateOf(false) }
+    var showExactAlarmDialog by remember { mutableStateOf(false) }
+
     // Pager state to manage the current page in the horizontal pager
     val pagerState = rememberPagerState(pageCount = { 3 }) // Number of pages in the pager
 
@@ -46,15 +50,90 @@ fun WelcomeScreen(navController: NavController, activity: ComponentActivity) {
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
-                if (!PermissionsHelper.hasAllPermissions(activity)) {
-                    PermissionsHelper.requestPermissions(activity)
-                } else {
-                    navController.navigate("home")
+                when {
+                    permissionsHelper.getMissingRuntimePermissions().isNotEmpty() -> {
+                        showRuntimePermissionDialog = true
+                    }
+                    permissionsHelper.needsExactAlarmPermission() -> {
+                        showExactAlarmDialog = true
+                    }
+                    else -> {
+                        navController.navigate("home")
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "Get Started")
+        }
+
+        // Runtime Permissions Dialog
+        if (showRuntimePermissionDialog) {
+            val missingPermissions = permissionsHelper.getMissingRuntimePermissions()
+            AlertDialog(
+                onDismissRequest = { showRuntimePermissionDialog = false },
+                title = { Text("Permissions Required") },
+                text = {
+                    Column {
+                        Text("SleepSafe needs the following permissions to function properly:")
+                        missingPermissions.forEach { permission ->
+                            Text("• ${permissionsHelper.getPermissionExplanation(permission)}")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        permissionsHelper.requestRuntimePermissions { granted ->
+                            showRuntimePermissionDialog = false
+                            if (granted) {
+                                if (permissionsHelper.needsExactAlarmPermission()) {
+                                    showExactAlarmDialog = true
+                                } else {
+                                    navController.navigate("home")
+                                }
+                            }
+                        }
+                    }) {
+                        Text("Grant Permissions")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRuntimePermissionDialog = false }) {
+                        Text("Later")
+                    }
+                }
+            )
+        }
+
+        // Exact Alarm Permission Dialog
+        if (showExactAlarmDialog) {
+            AlertDialog(
+                onDismissRequest = { showExactAlarmDialog = false },
+                title = { Text("Additional Permission Required") },
+                text = {
+                    Column {
+                        Text("SleepSafe needs one more permission to ensure alarms work correctly:")
+                        Text("• ${permissionsHelper.getPermissionExplanation("android.permission.SCHEDULE_EXACT_ALARM")}")
+                        Text("\nThis requires a quick visit to system settings.")
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        showExactAlarmDialog = false
+                        permissionsHelper.openExactAlarmSettings()
+                    }) {
+                        Text("Open Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showExactAlarmDialog = false
+                        navController.navigate("home")
+                    }) {
+                        Text("Skip")
+                    }
+                }
+            )
         }
     }
 }
